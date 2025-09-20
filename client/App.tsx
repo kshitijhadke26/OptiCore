@@ -1,36 +1,39 @@
 import "./global.css";
-
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { createRoot } from "react-dom/client";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import DashboardFaculty from "./pages/DashboardFaculty";
-import DashboardHOD from "./pages/DashboardHOD";
-import DashboardPrincipal from "./pages/DashboardPrincipal";
-import PrincipalTimetables from "./pages/PrincipalTimetables";
-import PrincipalApprovals from "./pages/PrincipalApprovals";
-import PrincipalWorkload from "./pages/PrincipalWorkload";
-import PrincipalResources from "./pages/PrincipalResources";
-import PrincipalReports from "./pages/PrincipalReports";
-import FacultyTimetable from "./pages/FacultyTimetable";
-import FacultyAttendance from "./pages/FacultyAttendance";
-import FacultyLeave from "./pages/FacultyLeave";
-import FacultyDemandLecture from "./pages/FacultyDemandLecture";
-import FacultyMySchedule from "./pages/FacultyMySchedule";
-import HODReview from "./pages/HODReview";
-import HODTimetable from "./pages/HODTimetable";
-import HODLeaveApprovals from "./pages/HODLeaveApprovals";
-import DashboardStudent from "./pages/DashboardStudent";
-import StudentTimetable from "./pages/StudentTimetable";
-import DashboardAdmin from "./pages/DashboardAdmin";
-import AdminImportData from "./pages/AdminImportData";
-import AdminGenerateTimetable from "./pages/AdminGenerateTimetable";
-import AdminReviewApproval from "./pages/AdminReviewApproval";
-import AdminUserManagement from "./pages/AdminUserManagement";
+import { LoadingSpinner } from "./components/ui/loading";
+
+// Lazy load all pages
+const Index = lazy(() => import("./pages/Index"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const DashboardFaculty = lazy(() => import("./pages/DashboardFaculty"));
+const DashboardHOD = lazy(() => import("./pages/DashboardHOD"));
+const DashboardPrincipal = lazy(() => import("./pages/DashboardPrincipal"));
+const PrincipalTimetables = lazy(() => import("./pages/PrincipalTimetables"));
+const PrincipalApprovals = lazy(() => import("./pages/PrincipalApprovals"));
+const PrincipalWorkload = lazy(() => import("./pages/PrincipalWorkload"));
+const PrincipalResources = lazy(() => import("./pages/PrincipalResources"));
+const PrincipalReports = lazy(() => import("./pages/PrincipalReports"));
+const FacultyTimetable = lazy(() => import("./pages/FacultyTimetable"));
+const FacultyAttendance = lazy(() => import("./pages/FacultyAttendance"));
+const FacultyLeave = lazy(() => import("./pages/FacultyLeave"));
+const FacultyDemandLecture = lazy(() => import("./pages/FacultyDemandLecture"));
+const FacultyMySchedule = lazy(() => import("./pages/FacultyMySchedule"));
+const HODReview = lazy(() => import("./pages/HODReview"));
+const HODTimetable = lazy(() => import("./pages/HODTimetable"));
+const HODLeaveApprovals = lazy(() => import("./pages/HODLeaveApprovals"));
+const DashboardStudent = lazy(() => import("./pages/DashboardStudent"));
+const StudentTimetable = lazy(() => import("./pages/StudentTimetable"));
+const DashboardAdmin = lazy(() => import("./pages/DashboardAdmin"));
+const AdminImportData = lazy(() => import("./pages/AdminImportData"));
+const AdminGenerateTimetable = lazy(() => import("./pages/AdminGenerateTimetable"));
+const AdminReviewApproval = lazy(() => import("./pages/AdminReviewApproval"));
+const AdminUserManagement = lazy(() => import("./pages/AdminUserManagement"));
 
 const queryClient = new QueryClient();
 
@@ -40,7 +43,8 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/dashboard/faculty" element={<DashboardFaculty />} />
           <Route path="/dashboard/faculty/timetable" element={<FacultyTimetable />} />
@@ -70,6 +74,7 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
