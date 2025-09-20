@@ -31,7 +31,9 @@ const DashboardStudent = lazy(() => import("./pages/DashboardStudent"));
 const StudentTimetable = lazy(() => import("./pages/StudentTimetable"));
 const DashboardAdmin = lazy(() => import("./pages/DashboardAdmin"));
 const AdminImportData = lazy(() => import("./pages/AdminImportData"));
-const AdminGenerateTimetable = lazy(() => import("./pages/AdminGenerateTimetable"));
+const AdminGenerateTimetable = lazy(
+  () => import("./pages/AdminGenerateTimetable"),
+);
 const AdminReviewApproval = lazy(() => import("./pages/AdminReviewApproval"));
 const AdminUserManagement = lazy(() => import("./pages/AdminUserManagement"));
 
@@ -45,35 +47,83 @@ const App = () => (
       <BrowserRouter>
         <Suspense fallback={<LoadingSpinner />}>
           <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/dashboard/faculty" element={<DashboardFaculty />} />
-          <Route path="/dashboard/faculty/timetable" element={<FacultyTimetable />} />
-          <Route path="/dashboard/faculty/attendance" element={<FacultyAttendance />} />
-          <Route path="/dashboard/faculty/leave" element={<FacultyLeave />} />
-          <Route path="/dashboard/faculty/demand-lecture" element={<FacultyDemandLecture />} />
-          <Route path="/dashboard/faculty/schedule" element={<FacultyMySchedule />} />
-          <Route path="/dashboard/hod" element={<DashboardHOD />} />
-          <Route path="/dashboard/principal" element={<DashboardPrincipal />} />
-          <Route path="/dashboard/principal/timetables" element={<PrincipalTimetables />} />
-          <Route path="/dashboard/principal/approvals" element={<PrincipalApprovals />} />
-          <Route path="/dashboard/principal/workload" element={<PrincipalWorkload />} />
-          <Route path="/dashboard/principal/resources" element={<PrincipalResources />} />
-          <Route path="/dashboard/principal/reports" element={<PrincipalReports />} />
-          <Route path="/dashboard/hod/timetable" element={<HODTimetable />} />
-          <Route path="/dashboard/hod/review" element={<HODReview />} />
-          <Route path="/dashboard/hod/leave-approvals" element={<HODLeaveApprovals />} />
-          <Route path="/dashboard/student" element={<DashboardStudent />} />
-          <Route path="/dashboard/student/timetable" element={<StudentTimetable />} />
+            <Route path="/" element={<Index />} />
+            <Route path="/dashboard/faculty" element={<DashboardFaculty />} />
+            <Route
+              path="/dashboard/faculty/timetable"
+              element={<FacultyTimetable />}
+            />
+            <Route
+              path="/dashboard/faculty/attendance"
+              element={<FacultyAttendance />}
+            />
+            <Route path="/dashboard/faculty/leave" element={<FacultyLeave />} />
+            <Route
+              path="/dashboard/faculty/demand-lecture"
+              element={<FacultyDemandLecture />}
+            />
+            <Route
+              path="/dashboard/faculty/schedule"
+              element={<FacultyMySchedule />}
+            />
+            <Route path="/dashboard/hod" element={<DashboardHOD />} />
+            <Route
+              path="/dashboard/principal"
+              element={<DashboardPrincipal />}
+            />
+            <Route
+              path="/dashboard/principal/timetables"
+              element={<PrincipalTimetables />}
+            />
+            <Route
+              path="/dashboard/principal/approvals"
+              element={<PrincipalApprovals />}
+            />
+            <Route
+              path="/dashboard/principal/workload"
+              element={<PrincipalWorkload />}
+            />
+            <Route
+              path="/dashboard/principal/resources"
+              element={<PrincipalResources />}
+            />
+            <Route
+              path="/dashboard/principal/reports"
+              element={<PrincipalReports />}
+            />
+            <Route path="/dashboard/hod/timetable" element={<HODTimetable />} />
+            <Route path="/dashboard/hod/review" element={<HODReview />} />
+            <Route
+              path="/dashboard/hod/leave-approvals"
+              element={<HODLeaveApprovals />}
+            />
+            <Route path="/dashboard/student" element={<DashboardStudent />} />
+            <Route
+              path="/dashboard/student/timetable"
+              element={<StudentTimetable />}
+            />
 
-          {/* Admin */}
-          <Route path="/dashboard/admin" element={<DashboardAdmin />} />
-          <Route path="/dashboard/admin/import" element={<AdminImportData />} />
-          <Route path="/dashboard/admin/generate" element={<AdminGenerateTimetable />} />
-          <Route path="/dashboard/admin/review" element={<AdminReviewApproval />} />
-          <Route path="/dashboard/admin/users" element={<AdminUserManagement />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* Admin */}
+            <Route path="/dashboard/admin" element={<DashboardAdmin />} />
+            <Route
+              path="/dashboard/admin/import"
+              element={<AdminImportData />}
+            />
+            <Route
+              path="/dashboard/admin/generate"
+              element={<AdminGenerateTimetable />}
+            />
+            <Route
+              path="/dashboard/admin/review"
+              element={<AdminReviewApproval />}
+            />
+            <Route
+              path="/dashboard/admin/users"
+              element={<AdminUserManagement />}
+            />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
         </Suspense>
       </BrowserRouter>
     </TooltipProvider>
