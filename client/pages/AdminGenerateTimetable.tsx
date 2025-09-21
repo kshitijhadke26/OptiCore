@@ -5,14 +5,81 @@ import { Fragment, useMemo, useState } from "react";
 
 const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-function timesFromMax(maxPerDay:number){
-  const base = ["09:00-10:00","10:00-11:00","11:00-12:00","12:00-13:00","14:00-15:00","15:00-16:00","16:00-17:00","17:00-18:00"];
-  return base.slice(0, Math.max(1, Math.min(base.length, maxPerDay)));
+function timesFromMax(maxPerDay:number, collegeStartTime: string = "09:00", collegeEndTime: string = "17:00", sessionDuration: number = 60, recessBreaks: RecessBreak[] = []){
+  // Generate time slots based on college hours and session duration
+  const startHour = parseInt(collegeStartTime.split(':')[0]);
+  const startMinute = parseInt(collegeStartTime.split(':')[1]);
+  const endHour = parseInt(collegeEndTime.split(':')[0]);
+  const endMinute = parseInt(collegeEndTime.split(':')[1]);
+  
+  const startTime = startHour * 60 + startMinute;
+  const endTime = endHour * 60 + endMinute;
+  
+  const allSlots: string[] = [];
+  let currentTime = startTime;
+  
+  // First, collect all unique recess times
+  const uniqueRecessTimes = new Set<string>();
+  recessBreaks.forEach(recess => {
+    uniqueRecessTimes.add(`${recess.start}-${recess.end}`);
+  });
+  
+  // Generate time slots, including recess breaks
+  while (currentTime < endTime) {
+    const startH = Math.floor(currentTime / 60);
+    const startM = currentTime % 60;
+    const currentTimeStr = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}`;
+    
+    // Check if this time matches any recess break start
+    const matchingRecess = Array.from(uniqueRecessTimes).find(recessSlot => {
+      const [start] = recessSlot.split('-');
+      return start === currentTimeStr;
+    });
+    
+    if (matchingRecess) {
+      // Add recess break slot
+      allSlots.push(matchingRecess);
+      
+      // Skip to end of recess
+      const [, end] = matchingRecess.split('-');
+      const [endH, endM] = end.split(':').map(Number);
+      currentTime = endH * 60 + endM;
+    } else {
+      // Generate regular class slot
+      const endT = currentTime + sessionDuration;
+      
+      if (endT <= endTime) {
+        const endH = Math.floor(endT / 60);
+        const endM = endT % 60;
+        const timeSlot = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}-${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+        
+        // Check if this slot would conflict with any recess break
+        const hasRecessConflict = Array.from(uniqueRecessTimes).some(recessSlot => {
+          const [rStart, rEnd] = recessSlot.split('-');
+          const [rStartH, rStartM] = rStart.split(':').map(Number);
+          const [rEndH, rEndM] = rEnd.split(':').map(Number);
+          const recessStart = rStartH * 60 + rStartM;
+          const recessEnd = rEndH * 60 + rEndM;
+          return (currentTime < recessEnd && endT > recessStart);
+        });
+        
+        if (!hasRecessConflict) {
+          allSlots.push(timeSlot);
+        }
+      }
+      
+      currentTime += sessionDuration;
+    }
+  }
+  
+  return allSlots.length > 0 ? allSlots : ["09:00-10:00"]; // Fallback
 }
 
 type Subject = { name: string; perWeek: number; perDay?: number; facultyCount?: number; type?: 'Lecture'|'Practical'; sessionLength?: number };
 
 type FixedSlot = { subject: string; day: string; time?: string; allDay?: boolean; repeatAllDays?: boolean; room?: string; batch?: number };
+
+type RecessBreak = { day: string; start: string; end: string };
 
 type Config = {
   year: string;
@@ -22,6 +89,10 @@ type Config = {
   maxPerDay: number;
   avgFacultyLeaves: number;
   fixedSlots: FixedSlot[];
+  recess: RecessBreak[];
+  collegeStartTime: string;
+  collegeEndTime: string;
+  sessionDuration: number;
 };
 
 type Slot = { subject: string; room: string; batch: number };
@@ -37,8 +108,24 @@ function generatePlan(cfg: Config, seed:number){
   const rng = ()=>{ rand = (rand * 9301 + 49297) % 233280; return rand / 233280; };
   const rint = (n:number)=> Math.floor(rng()*n);
 
-  const times = timesFromMax(cfg.maxPerDay);
+  // Generate times considering college timing and recess breaks
+  const recessForAllDays = cfg.recess || [];
+  const times = timesFromMax(
+    cfg.maxPerDay, 
+    cfg.collegeStartTime || "09:00", 
+    cfg.collegeEndTime || "17:00", 
+    cfg.sessionDuration || 60, 
+    recessForAllDays
+  );
   const plan: Record<string, Slot[]> = {};
+
+  // Add recess breaks to the plan as blocked slots for each day they're configured
+  for (const recess of recessForAllDays) {
+    const recessSlot = `${recess.start}-${recess.end}`;
+    // Always add recess breaks to the plan, regardless of whether they're in times array
+    const key = `${recess.day}-${recessSlot}`;
+    plan[key] = [{ subject: "RECESS BREAK", room: "ALL", batch: 0 }];
+  }
 
   const assign = (day:string, time:string, slot: Slot)=>{
     const key = `${day}-${time}`; plan[key] ||= [];
@@ -245,19 +332,47 @@ export default function AdminGenerateTimetable(){
                 <div className="grid" style={{ gridTemplateColumns: `100px repeat(${days.length}, 1fr)` }}>
                   <div className="text-[11px] p-1">Time</div>
                   {days.map(d=> <div key={d} className="text-[11px] p-1 text-center">{d}</div>)}
-                  {r.times.map((t)=> (
-                    <Fragment key={t}>
-                      <div className="text-[11px] p-1 border-y">{t}</div>
-                      {days.map((d)=>{
-                        const key = `${d}-${t}`; const vals = r.plan[key] || [];
-                        return <div key={key} className={`p-1 border ${vals.length? 'bg-muted/40':''}`}>
-                          <div className="text-[11px] space-y-1">
-                            {vals.map((v,i)=> <div key={i}>{v.subject} • R-{v.room} • B{v.batch}</div>)}
-                          </div>
-                        </div>;
-                      })}
-                    </Fragment>
-                  ))}
+                  {(() => {
+                    // Get all unique time slots from both times array and plan keys
+                    const allTimeSlots = new Set([...r.times]);
+                    Object.keys(r.plan).forEach(key => {
+                      const [day, time] = key.split('-', 2);
+                      if (time && time.includes(':')) {
+                        allTimeSlots.add(time);
+                      }
+                    });
+                    
+                    // Sort time slots chronologically
+                    const sortedTimes = Array.from(allTimeSlots).sort((a, b) => {
+                      const [aStart] = a.split('-');
+                      const [bStart] = b.split('-');
+                      const [aHour, aMin] = aStart.split(':').map(Number);
+                      const [bHour, bMin] = bStart.split(':').map(Number);
+                      return (aHour * 60 + aMin) - (bHour * 60 + bMin);
+                    });
+                    
+                    return sortedTimes.map((t)=> (
+                      <Fragment key={t}>
+                        <div className="text-[11px] p-1 border-y">{t}</div>
+                        {days.map((d)=>{
+                          const key = `${d}-${t}`; const vals = r.plan[key] || [];
+                          
+                          // Check if this is a recess break
+                          const isRecess = vals.some(v => v.subject === "RECESS BREAK");
+                          
+                          return <div key={key} className={`p-1 border ${isRecess ? 'bg-orange-100 border-orange-300' : vals.length? 'bg-muted/40':''}`}>
+                            <div className="text-[11px] space-y-1">
+                              {vals.map((v,i)=> (
+                                <div key={i} className={isRecess ? 'text-orange-700 font-medium' : ''}>
+                                  {v.subject === "RECESS BREAK" ? "🍽️ RECESS" : `${v.subject} • R-${v.room} • B${v.batch}`}
+                                </div>
+                              ))}
+                            </div>
+                          </div>;
+                        })}
+                      </Fragment>
+                    ));
+                  })()}
                 </div>
                 <div className="mt-3 flex gap-2">
                   <Button variant="outline" onClick={()=>sendToHOD(idx)}>Send to HOD</Button>

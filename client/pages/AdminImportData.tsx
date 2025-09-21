@@ -3,11 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle, AlertCircle, Upload, FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type Subject = { name: string; perWeek: number; perDay?: number; facultyCount?: number; type?: 'Lecture'|'Practical'; sessionLength?: number; facultyNames?: string[] };
 
-type FixedSlot = { subject: string; day: string; time?: string; allDay?: boolean; repeatAllDays?: boolean; room?: string; batch?: number };
+type FixedSlot = { subject: string; day: string; time?: string; allDay?: boolean; room?: string; batch?: number };
 
 type RecessBreak = { day: string; start: string; end: string };
 
@@ -21,6 +23,9 @@ type Config = {
   fixedSlots: FixedSlot[];
   recess: RecessBreak[];
   sourceFiles: { name: string; type: string }[];
+  collegeStartTime: string;
+  collegeEndTime: string;
+  sessionDuration: number;
 };
 
 const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -36,6 +41,8 @@ function loadConfig(year: string): Config | null {
 
 export default function AdminImportData(){
   const [year, setYear] = useState("1");
+  const [mappingPreview, setMappingPreview] = useState<{detected: string[], mapped: Record<string, string>} | null>(null);
+  const [allDaysSelected, setAllDaysSelected] = useState(false);
   const [cfg, setCfg] = useState<Config>(() => loadConfig("1") || {
     year: "1",
     classrooms: 10,
@@ -50,6 +57,9 @@ export default function AdminImportData(){
     fixedSlots: [],
     recess: [],
     sourceFiles: [],
+    collegeStartTime: "09:00",
+    collegeEndTime: "17:00",
+    sessionDuration: 60,
   });
 
   useEffect(()=>{
@@ -65,21 +75,37 @@ export default function AdminImportData(){
     const headerCols = rows[0].split(',').map(s=> s.replace(/^\"|\"$/g,'').trim());
     const headerMap: Record<string, number> = {};
     const synonyms: Record<string,string[]> = {
-      name: ['subject','name','subjectname'],
-      perWeek: ['classesweek','perweek','classesperweek','periodsweek','periodsperweek'],
-      perDay: ['maxday','perday','maxperday'],
-      facultyCount: ['faculties','faculty','teachers','teachercount'],
-      facultyNames: ['facultyname','facultynames','teacher','teachers','instructor','instructors'],
-      type: ['type','kind','classtype','category','lectureorpractical'],
-      duration: ['duration','length','sessionlength']
+      name: ['subject','name','subjectname','course','coursename','module'],
+      perWeek: ['classesweek','perweek','classesperweek','periodsweek','periodsperweek','weekly','weeklyperiods'],
+      perDay: ['maxday','perday','maxperday','dailymax','maxdaily'],
+      facultyCount: ['faculties','faculty','teachers','teachercount','instructors','staff','staffcount'],
+      facultyNames: ['facultyname','facultynames','teacher','teachers','instructor','instructors','staffnames','assignedto'],
+      type: ['type','kind','classtype','category','lectureorpractical','mode','sessiontype'],
+      duration: ['duration','length','sessionlength','time','minutes','hours']
     };
+    
+    // Enhanced mapping with better detection
+    const mappedFields: Record<string, string> = {};
     headerCols.forEach((h,idx)=>{
       const key = normalize(h);
       for (const [field, syns] of Object.entries(synonyms)){
-        if (syns.includes(key)) headerMap[field] = idx;
+        if (syns.includes(key)) {
+          headerMap[field] = idx;
+          mappedFields[field] = h;
+        }
       }
-      if (!("name" in headerMap) && key==='subject') headerMap.name = idx;
+      if (!("name" in headerMap) && key==='subject') {
+        headerMap.name = idx;
+        mappedFields.name = h;
+      }
     });
+    
+    // Set mapping preview for user feedback
+    setMappingPreview({
+      detected: headerCols,
+      mapped: mappedFields
+    });
+    
     const hasHeader = Object.keys(headerMap).length>0;
 
     const subjects: Subject[] = [];
@@ -125,8 +151,59 @@ export default function AdminImportData(){
   function addSubject(){ setCfg((c)=> ({ ...c, subjects: [...c.subjects, { name: "", perWeek: 2, perDay: 1, facultyCount: 1, type:'Lecture', sessionLength:60, facultyNames: [] }] })); }
   function removeSubject(i:number){ setCfg((c)=> ({ ...c, subjects: c.subjects.filter((_,idx)=> idx!==i) })); }
 
-  function addFixed(){ setCfg((c)=> ({ ...c, fixedSlots: [...c.fixedSlots, { subject: c.subjects[0]?.name || "", day: days[0], time: "09:00-10:00", allDay: false, repeatAllDays: false, room: "101", batch: 1 }] })); }
+  function addFixed(){ setCfg((c)=> ({ ...c, fixedSlots: [...c.fixedSlots, { subject: c.subjects[0]?.name || "", day: days[0], time: "09:00-10:00", allDay: false, room: "101", batch: 1 }] })); }
   function removeFixed(i:number){ setCfg((c)=> ({ ...c, fixedSlots: c.fixedSlots.filter((_,idx)=> idx!==i) })); }
+
+  // Handle All Day functionality for fixed slots
+  function handleAllDayToggle(index: number, checked: boolean) {
+    if (checked) {
+      // When All Day is checked, create slots for all days
+      setCfg(c => {
+        const currentSlot = c.fixedSlots[index];
+        const newSlots = [...c.fixedSlots];
+        
+        // Remove the current slot
+        newSlots.splice(index, 1);
+        
+        // Add slots for all days
+        days.forEach(day => {
+          newSlots.push({
+            ...currentSlot,
+            day,
+            allDay: true,
+            time: undefined
+          });
+        });
+        
+        return { ...c, fixedSlots: newSlots };
+      });
+    } else {
+      // When unchecked, just update the current slot
+      setCfg(c => {
+        const arr = [...c.fixedSlots];
+        arr[index] = { ...arr[index], allDay: false, time: "09:00-10:00" };
+        return { ...c, fixedSlots: arr };
+      });
+    }
+  }
+
+  // Handle All Days selection for recess breaks
+  function handleAllDaysToggle(checked: boolean) {
+    setAllDaysSelected(checked);
+    if (checked) {
+      // Add recess breaks for all days if not present
+      const existingDays = new Set((cfg.recess || []).map(r => r.day));
+      const newRecess = [...(cfg.recess || [])];
+      
+      days.forEach(day => {
+        if (!existingDays.has(day)) {
+          newRecess.push({ day, start: "12:00", end: "12:30" });
+        }
+      });
+      
+      setCfg(c => ({ ...c, recess: newRecess }));
+    }
+  }
 
   function save(){
     const toSave: Config = { ...cfg, year };
@@ -160,29 +237,132 @@ export default function AdminImportData(){
         </div>
 
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Upload</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              Smart Data Import
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <Label>Upload CSV/XLSX</Label>
-                <Input type="file" accept=".csv,.xlsx" onChange={onFile} />
-                <div className="mt-2 text-xs text-muted-foreground">CSV columns supported: Subject, Classes/Week, Max/Day, Faculties (count), Faculty Names, Type (Lecture/Practical), Duration (60/120)</div>
+                <Label>Upload CSV/XLSX File</Label>
+                <div className="relative">
+                  <Input type="file" accept=".csv,.xlsx" onChange={onFile} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#079E74] file:text-white hover:file:bg-[#068d67]" />
+                </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  <strong>Auto-detected columns:</strong> Subject/Name, Classes/Week, Max/Day, Faculty Count, Faculty Names, Type, Duration
+                </div>
               </div>
               <div>
                 <Label>Uploaded Files</Label>
-                <div className="border rounded-md p-2 text-sm min-h-[42px]">
-                  {cfg.sourceFiles.length===0? <div className="text-muted-foreground">No files uploaded</div> : (
-                    <ul className="list-disc pl-4 space-y-1">{cfg.sourceFiles.map((f,i)=>(<li key={i}>{f.name}</li>))}</ul>
+                <div className="border rounded-md p-3 text-sm min-h-[42px]">
+                  {cfg.sourceFiles.length===0? (
+                    <div className="text-muted-foreground flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      No files uploaded yet
+                    </div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {cfg.sourceFiles.map((f,i)=>(
+                        <li key={i} className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span>{f.name}</span>
+                          <Badge variant="secondary" className="text-xs">{f.type.includes('csv') ? 'CSV' : 'XLSX'}</Badge>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </div>
             </div>
+
+            {/* Column Mapping Preview */}
+            {mappingPreview && (
+              <div className="border rounded-lg p-4 bg-green-50 border-green-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <h4 className="font-medium text-green-800">Column Mapping Detected</h4>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <Label className="text-green-700">Detected Columns:</Label>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {mappingPreview.detected.map((col, i) => (
+                        <Badge key={i} variant="outline" className="text-xs">{col}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-green-700">Auto-Mapped Fields:</Label>
+                    <div className="space-y-1 mt-1">
+                      {Object.entries(mappingPreview.mapped).map(([field, column]) => (
+                        <div key={field} className="flex items-center gap-2 text-xs">
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                          <span className="font-medium">{field}:</span>
+                          <span className="text-muted-foreground">{column}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Timetable Constraints</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            {/* College Timing Section */}
+            <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
+              <h4 className="font-medium text-blue-800 mb-3 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                College Timing Configuration
+              </h4>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">College Start Time</Label>
+                  <Input 
+                    type="time" 
+                    value={cfg.collegeStartTime} 
+                    onChange={e=> setCfg(c=>({...c, collegeStartTime: e.target.value}))} 
+                    className="bg-white"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">College End Time</Label>
+                  <Input 
+                    type="time" 
+                    value={cfg.collegeEndTime} 
+                    onChange={e=> setCfg(c=>({...c, collegeEndTime: e.target.value}))} 
+                    className="bg-white"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Default Session Duration (minutes)</Label>
+                  <select 
+                    className="border rounded-md px-2 py-2 w-full bg-white" 
+                    value={cfg.sessionDuration} 
+                    onChange={e=> setCfg(c=>({...c, sessionDuration: Number(e.target.value)}))}
+                  >
+                    <option value={45}>45 minutes</option>
+                    <option value={60}>60 minutes</option>
+                    <option value={90}>90 minutes</option>
+                    <option value={120}>120 minutes</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-blue-700">
+                Total available hours: {(() => {
+                  const start = new Date(`2000-01-01T${cfg.collegeStartTime}:00`);
+                  const end = new Date(`2000-01-01T${cfg.collegeEndTime}:00`);
+                  const diff = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                  return `${diff.toFixed(1)} hours`;
+                })()}
+              </div>
+            </div>
+
             <div className="grid md:grid-cols-4 gap-4">
               <div>
                 <Label>Number of Classrooms</Label>
@@ -263,45 +443,72 @@ export default function AdminImportData(){
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <Label>Special Fixed Slots</Label>
+                <Label className="text-base font-medium">Special Fixed Slots</Label>
                 <Button variant="outline" size="sm" onClick={addFixed}>Add Fixed Slot</Button>
               </div>
-              <div className="space-y-2">
-                {cfg.fixedSlots.length===0 && <div className="text-sm text-muted-foreground">No fixed slots added</div>}
+              <div className="space-y-3">
+                {cfg.fixedSlots.length===0 && (
+                  <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-lg text-center">
+                    No fixed slots added. Click "Add Fixed Slot" to create subject-specific time slots.
+                  </div>
+                )}
                 {cfg.fixedSlots.map((f,i)=> (
-                  <div key={i} className="grid md:grid-cols-7 gap-2 items-end">
+                  <div key={i} className="grid md:grid-cols-6 gap-3 items-end p-3 border rounded-lg bg-gray-50">
                     <div>
-                      <Label>Subject</Label>
+                      <Label className="text-sm font-medium">Subject</Label>
                       <Input value={f.subject} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], subject: e.target.value }; return { ...c, fixedSlots: arr }; })} />
                     </div>
                     <div>
-                      <Label>Day</Label>
-                      <select className="border rounded-md px-2 py-2 w-full" value={f.day} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], day: e.target.value }; return { ...c, fixedSlots: arr }; })}>
+                      <Label className="text-sm font-medium">Day</Label>
+                      <select 
+                        className="border rounded-md px-2 py-2 w-full disabled:bg-gray-100 disabled:cursor-not-allowed" 
+                        value={f.day} 
+                        disabled={!!f.allDay}
+                        onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], day: e.target.value }; return { ...c, fixedSlots: arr }; })}
+                      >
                         {days.map(d=> <option key={d} value={d}>{d}</option>)}
                       </select>
+                      {f.allDay && (
+                        <div className="text-xs text-blue-600 mt-1">Applied to all days</div>
+                      )}
                     </div>
                     <div>
-                      <Label>All Day</Label>
-                      <input type="checkbox" className="h-4 w-4" checked={!!f.allDay} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], allDay: e.target.checked, time: e.target.checked? undefined : (arr[i].time||"09:00-10:00") }; return { ...c, fixedSlots: arr }; })} />
+                      <Label className="text-sm font-medium">Apply to All Days</Label>
+                      <div className="flex items-center gap-2 mt-2">
+                        <input 
+                          type="checkbox" 
+                          className="h-4 w-4 text-[#079E74] rounded border-gray-300 focus:ring-[#079E74]" 
+                          checked={!!f.allDay} 
+                          onChange={e=> handleAllDayToggle(i, e.target.checked)} 
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {f.allDay ? 'All days' : 'Single day'}
+                        </span>
+                      </div>
                     </div>
                     <div>
-                      <Label>Repeat All Days</Label>
-                      <input type="checkbox" className="h-4 w-4" checked={!!f.repeatAllDays} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], repeatAllDays: e.target.checked }; return { ...c, fixedSlots: arr }; })} />
+                      <Label className="text-sm font-medium">Time Slot</Label>
+                      <Input 
+                        type="text" 
+                        placeholder="09:00-10:00" 
+                        disabled={!!f.allDay} 
+                        value={f.time||""} 
+                        onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], time: e.target.value }; return { ...c, fixedSlots: arr }; })} 
+                      />
+                      {f.allDay && (
+                        <div className="text-xs text-muted-foreground mt-1">Full day slot</div>
+                      )}
                     </div>
                     <div>
-                      <Label>Time</Label>
-                      <Input type="text" placeholder="09:00-10:00" disabled={!!f.allDay} value={f.time||""} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], time: e.target.value }; return { ...c, fixedSlots: arr }; })} />
-                    </div>
-                    <div>
-                      <Label>Room</Label>
+                      <Label className="text-sm font-medium">Room</Label>
                       <Input placeholder="101" value={f.room||""} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], room: e.target.value }; return { ...c, fixedSlots: arr }; })} />
                     </div>
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <Label>Batch</Label>
+                        <Label className="text-sm font-medium">Batch</Label>
                         <Input type="number" value={f.batch||1} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], batch: Number(e.target.value) }; return { ...c, fixedSlots: arr }; })} />
                       </div>
-                      <Button variant="ghost" onClick={()=>removeFixed(i)}>Remove</Button>
+                      <Button variant="ghost" size="sm" onClick={()=>removeFixed(i)}>Remove</Button>
                     </div>
                   </div>
                 ))}
@@ -309,30 +516,80 @@ export default function AdminImportData(){
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2 mt-4">
-                <Label>Recess Breaks</Label>
-                <Button variant="outline" size="sm" onClick={()=> setCfg(c=> ({ ...c, recess: [...(c.recess||[]), { day: days[0], start: "12:00", end: "12:30" }] }))}>Add Recess</Button>
+              <div className="flex items-center justify-between mb-4 mt-4">
+                <Label className="text-base font-medium">Recess Breaks Configuration</Label>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox" 
+                      id="allDays" 
+                      className="h-4 w-4 text-[#079E74] rounded border-gray-300 focus:ring-[#079E74]" 
+                      checked={allDaysSelected} 
+                      onChange={(e) => handleAllDaysToggle(e.target.checked)} 
+                    />
+                    <Label htmlFor="allDays" className="text-sm font-medium">Apply to All Days</Label>
+                  </div>
+                  {!allDaysSelected && (
+                    <Button variant="outline" size="sm" onClick={()=> setCfg(c=> ({ ...c, recess: [...(c.recess||[]), { day: days[0], start: "12:00", end: "12:30" }] }))}>Add Recess</Button>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                {(cfg.recess||[]).length===0 && <div className="text-sm text-muted-foreground">No recess breaks configured</div>}
+
+              {allDaysSelected && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-800">All Days Mode Active</span>
+                  </div>
+                  <p className="text-xs text-blue-700">Recess breaks will be automatically applied to all working days. Individual day selection is disabled.</p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {(cfg.recess||[]).length===0 && !allDaysSelected && (
+                  <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-lg text-center">
+                    No recess breaks configured. Click "Add Recess" or enable "Apply to All Days" for automatic setup.
+                  </div>
+                )}
+                
                 {(cfg.recess||[]).map((r,i)=> (
-                  <div key={i} className="grid md:grid-cols-5 gap-2 items-end">
+                  <div key={i} className="grid md:grid-cols-5 gap-3 items-end p-3 border rounded-lg bg-gray-50">
                     <div>
-                      <Label>Day</Label>
-                      <select className="border rounded-md px-2 py-2 w-full" value={r.day} onChange={e=> setCfg(c=>{ const arr=[...(c.recess||[])]; arr[i] = { ...arr[i], day: e.target.value }; return { ...c, recess: arr }; })}>
+                      <Label className="text-sm font-medium">Day</Label>
+                      <select 
+                        className="border rounded-md px-2 py-2 w-full disabled:bg-gray-100 disabled:cursor-not-allowed" 
+                        value={r.day} 
+                        disabled={allDaysSelected}
+                        onChange={e=> setCfg(c=>{ const arr=[...(c.recess||[])]; arr[i] = { ...arr[i], day: e.target.value }; return { ...c, recess: arr }; })}
+                      >
                         {days.map(d=> <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
                     <div>
-                      <Label>Start</Label>
+                      <Label className="text-sm font-medium">Start Time</Label>
                       <Input type="time" value={r.start} onChange={e=> setCfg(c=>{ const arr=[...(c.recess||[])]; arr[i] = { ...arr[i], start: e.target.value }; return { ...c, recess: arr }; })} />
                     </div>
                     <div>
-                      <Label>End</Label>
+                      <Label className="text-sm font-medium">End Time</Label>
                       <Input type="time" value={r.end} onChange={e=> setCfg(c=>{ const arr=[...(c.recess||[])]; arr[i] = { ...arr[i], end: e.target.value }; return { ...c, recess: arr }; })} />
                     </div>
-                    <div className="md:col-span-2">
-                      <Button variant="ghost" onClick={()=> setCfg(c=> ({ ...c, recess: (c.recess||[]).filter((_,idx)=> idx!==i) }))}>Remove</Button>
+                    <div>
+                      <Label className="text-sm font-medium">Duration</Label>
+                      <div className="text-sm text-muted-foreground py-2 px-3 bg-white border rounded-md">
+                        {(() => {
+                          const start = new Date(`2000-01-01T${r.start}:00`);
+                          const end = new Date(`2000-01-01T${r.end}:00`);
+                          const diff = (end.getTime() - start.getTime()) / (1000 * 60);
+                          return `${diff} min`;
+                        })()}
+                      </div>
+                    </div>
+                    <div>
+                      {!allDaysSelected && (
+                        <Button variant="ghost" size="sm" onClick={()=> setCfg(c=> ({ ...c, recess: (c.recess||[]).filter((_,idx)=> idx!==i) }))}>
+                          Remove
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}

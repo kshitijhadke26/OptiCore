@@ -26,9 +26,9 @@ export default function Index() {
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <ShieldCheck className="h-5 w-5" />
           </div>
-          <CardTitle className="text-xl">Smart Classroom Scheduler</CardTitle>
+          <CardTitle className="text-xl">Team OptiCore Prototype</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Access your institutional scheduling system
+            Smart Classroom Scheduler - SIH Project Demo
           </p>
         </CardHeader>
         <CardContent>
@@ -113,7 +113,7 @@ export default function Index() {
 
                 <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                   <GraduationCap className="h-3.5 w-3.5" />
-                  SecureEdu College Management System
+                  Team OptiCore - Smart India Hackathon 2025
                 </div>
               </form>
             </TabsContent>
