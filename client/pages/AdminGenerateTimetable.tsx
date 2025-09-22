@@ -6,7 +6,7 @@ import { Fragment, useMemo, useState } from "react";
 const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
 function timesFromMax(maxPerDay:number, collegeStartTime: string = "09:00", collegeEndTime: string = "17:00", sessionDuration: number = 60, recessBreaks: RecessBreak[] = []){
-  // Generate comprehensive time slots for optimal timetable coverage
+  // Generate time slots based on college hours and include recess breaks
   const startHour = parseInt(collegeStartTime.split(':')[0]);
   const startMinute = parseInt(collegeStartTime.split(':')[1]);
   const endHour = parseInt(collegeEndTime.split(':')[0]);
@@ -15,51 +15,79 @@ function timesFromMax(maxPerDay:number, collegeStartTime: string = "09:00", coll
   const startTime = startHour * 60 + startMinute;
   const endTime = endHour * 60 + endMinute;
   
-  const allSlots: string[] = [];
+  console.log('timesFromMax - Input recess breaks:', recessBreaks);
   
-  // Always include mandatory recess break (01:00 PM–01:30 PM)
-  const mandatoryRecess = { start: "13:00", end: "13:30" };
-  const recessStart = 13 * 60; // 13:00 in minutes
-  const recessEnd = 13 * 60 + 30; // 13:30 in minutes
+  // Collect recess break times first to avoid conflicts
+  const recessTimes: { start: number, end: number, slot: string }[] = [];
   
-  // Generate morning slots (before recess)
-  let currentTime = startTime;
-  while (currentTime + sessionDuration <= recessStart) {
-    const startH = Math.floor(currentTime / 60);
-    const startM = currentTime % 60;
-    const endT = currentTime + sessionDuration;
-    const endH = Math.floor(endT / 60);
-    const endM = endT % 60;
-    
-    const timeSlot = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}-${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
-    allSlots.push(timeSlot);
-    currentTime += sessionDuration;
-  }
-  
-  // Add mandatory recess break
-  allSlots.push(`${mandatoryRecess.start}-${mandatoryRecess.end}`);
-  
-  // Generate afternoon slots (after recess)
-  currentTime = recessEnd;
-  while (currentTime + sessionDuration <= endTime) {
-    const startH = Math.floor(currentTime / 60);
-    const startM = currentTime % 60;
-    const endT = currentTime + sessionDuration;
-    const endH = Math.floor(endT / 60);
-    const endM = endT % 60;
-    
-    const timeSlot = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}-${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
-    allSlots.push(timeSlot);
-    currentTime += sessionDuration;
-  }
-  
-  // Add configured additional recess breaks if any
+  // Add configured recess breaks
   recessBreaks.forEach(recess => {
     if (recess.selectedDays && recess.selectedDays.length > 0) {
-      const additionalRecess = `${recess.start}-${recess.end}`;
-      if (!allSlots.includes(additionalRecess) && additionalRecess !== `${mandatoryRecess.start}-${mandatoryRecess.end}`) {
-        allSlots.push(additionalRecess);
+      const [startH, startM] = recess.start.split(':').map(Number);
+      const [endH, endM] = recess.end.split(':').map(Number);
+      recessTimes.push({
+        start: startH * 60 + startM,
+        end: endH * 60 + endM,
+        slot: `${recess.start}-${recess.end}`
+      });
+    }
+  });
+  
+  // If no recess breaks configured, add default
+  if (recessTimes.length === 0) {
+    recessTimes.push({
+      start: 13 * 60, // 13:00
+      end: 13 * 60 + 30, // 13:30
+      slot: "13:00-13:30"
+    });
+  }
+  
+  console.log('Recess times to avoid:', recessTimes);
+  
+  // Generate class time slots avoiding recess periods
+  const allSlots: string[] = [];
+  let currentTime = startTime;
+  
+  while (currentTime < endTime) {
+    // Check if current time would conflict with any recess break
+    const conflictsWithRecess = recessTimes.some(recess => 
+      (currentTime < recess.end && currentTime + sessionDuration > recess.start)
+    );
+    
+    if (conflictsWithRecess) {
+      // Find the recess that conflicts and skip to its end
+      const conflictingRecess = recessTimes.find(recess => 
+        currentTime < recess.end && currentTime + sessionDuration > recess.start
+      );
+      if (conflictingRecess) {
+        // If we're at the exact start of recess, add the recess slot
+        if (currentTime === conflictingRecess.start) {
+          allSlots.push(conflictingRecess.slot);
+          console.log('Added recess break to time slots:', conflictingRecess.slot);
+        }
+        currentTime = conflictingRecess.end;
       }
+    } else {
+      // Generate regular class slot
+      if (currentTime + sessionDuration <= endTime) {
+        const startH = Math.floor(currentTime / 60);
+        const startM = currentTime % 60;
+        const endT = currentTime + sessionDuration;
+        const endH = Math.floor(endT / 60);
+        const endM = endT % 60;
+        
+        const timeSlot = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}-${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+        allSlots.push(timeSlot);
+      }
+      currentTime += sessionDuration;
+    }
+  }
+  
+  // Ensure all recess breaks are included
+  recessTimes.forEach(recess => {
+    if (!allSlots.includes(recess.slot)) {
+      allSlots.push(recess.slot);
+      console.log('Added missing recess break to time slots:', recess.slot);
     }
   });
   
@@ -74,7 +102,8 @@ function timesFromMax(maxPerDay:number, collegeStartTime: string = "09:00", coll
     return aTime - bTime;
   });
   
-  console.log('Generated time slots:', sortedSlots);
+  console.log('Final generated time slots:', sortedSlots);
+  
   return sortedSlots.length > 0 ? sortedSlots : ["09:00-10:00", "10:00-11:00", "11:00-12:00", "12:00-13:00", "13:00-13:30", "13:30-14:30", "14:30-15:30", "15:30-16:30"];
 }
 
@@ -113,6 +142,8 @@ function generatePlan(cfg: Config, seed:number){
 
   // Generate times considering college timing and recess breaks
   const recessForAllDays = cfg.recess || [];
+  console.log('Import Data recess configuration:', recessForAllDays);
+  
   const times = timesFromMax(
     cfg.maxPerDay, 
     cfg.collegeStartTime || "09:00", 
@@ -120,6 +151,8 @@ function generatePlan(cfg: Config, seed:number){
     cfg.sessionDuration || 60, 
     recessForAllDays
   );
+  
+  console.log('Generated time slots:', times);
   const plan: Record<string, Slot[]> = {};
 
   // Enhanced conflict tracking - declare first
@@ -127,29 +160,46 @@ function generatePlan(cfg: Config, seed:number){
   const facultyConflicts: Record<string, Set<string>> = {}; // key -> set of faculty used
   const batchConflicts: Record<string, Set<number>> = {}; // key -> set of batches used
 
-  // Add mandatory recess break for all days (01:00 PM–01:30 PM) - STRICT BLOCKING
-  const mandatoryRecessSlot = "13:00-13:30";
-  for (const day of days) {
-    const key = `${day}-${mandatoryRecessSlot}`;
-    plan[key] = [{ subject: "RECESS BREAK", room: "ALL", batch: 0, subjectType: undefined }];
-    // Also block in conflict tracking
-    roomConflicts[key] = new Set(["ALL"]);
-    batchConflicts[key] = new Set([0]);
-    facultyConflicts[key] = new Set(["RECESS"]);
-  }
+  // Add configured recess breaks for ALL days (not just selected days)
+  const configuredRecessSlots: string[] = [];
   
-  // Add configured recess breaks to the plan as blocked slots for each day they're configured
-  for (const recess of recessForAllDays) {
-    const recessSlot = `${recess.start}-${recess.end}`;
-    // Skip if this is the mandatory recess (already added)
-    if (recessSlot === mandatoryRecessSlot) continue;
+  // Check if recess breaks are configured in Import Data
+  const hasConfiguredRecess = cfg.recess && cfg.recess.length > 0 && 
+    cfg.recess.some(recess => recess.selectedDays && recess.selectedDays.length > 0);
+  
+  if (hasConfiguredRecess) {
+    // Use configured recess breaks
+    cfg.recess?.forEach(recess => {
+      if (recess.selectedDays && recess.selectedDays.length > 0) {
+        const recessSlot = `${recess.start}-${recess.end}`;
+        configuredRecessSlots.push(recessSlot);
+        
+        // Add recess break to ALL days
+        for (const day of days) {
+          const key = `${day}-${recessSlot}`;
+          plan[key] = [{ subject: "RECESS BREAK", room: "ALL", batch: 0, subjectType: undefined }];
+          console.log(`Added recess break: ${key} -> RECESS BREAK`);
+        }
+      }
+    });
+    console.log('Added configured recess breaks to all days:', configuredRecessSlots);
+  } else {
+    // Add default recess break if none configured
+    const defaultRecessSlot = "13:00-13:30";
+    configuredRecessSlots.push(defaultRecessSlot);
     
-    // Add recess breaks for each selected day
-    for (const day of recess.selectedDays || []) {
-      const key = `${day}-${recessSlot}`;
+    for (const day of days) {
+      const key = `${day}-${defaultRecessSlot}`;
       plan[key] = [{ subject: "RECESS BREAK", room: "ALL", batch: 0, subjectType: undefined }];
+      console.log(`Added default recess break: ${key} -> RECESS BREAK`);
     }
+    console.log('Added default recess break (13:00-13:30) to all days');
   }
+
+  // Helper function to check if a time slot is a recess break
+  const isRecessTime = (timeSlot: string): boolean => {
+    return configuredRecessSlots.includes(timeSlot);
+  };
 
   const assign = (day:string, time:string, slot: Slot)=>{
     const key = `${day}-${time}`; plan[key] ||= [];
@@ -227,7 +277,7 @@ function generatePlan(cfg: Config, seed:number){
       if (f.allDay){
         for (const t of times){ 
           // Skip recess break slots
-          if (t.includes('13:00-13:30') || t === '13:00-13:30') continue;
+          if (isRecessTime(t)) continue;
           if (!checkConflicts(d, t, room, batch)) {
             assign(d, t, { subject: f.subject, room, batch });
             recordAssignment(d, t, room, batch);
@@ -235,7 +285,7 @@ function generatePlan(cfg: Config, seed:number){
         }
       } else if (f.time){
         // Skip if trying to schedule during recess
-        if (f.time.includes('13:00-13:30') || f.time === '13:00-13:30') continue;
+        if (isRecessTime(f.time)) continue;
         if (!checkConflicts(d, f.time, room, batch)) {
           assign(d, f.time, { subject: f.subject, room, batch });
           recordAssignment(d, f.time, room, batch);
@@ -253,7 +303,7 @@ function generatePlan(cfg: Config, seed:number){
     const orderDays = [...days].sort(()=> rng()-0.5);
     for (const d of orderDays){
       if (perDayCount[batch][d] >= cfg.maxPerDay) continue;
-      const shuffled = [...times].filter(t => !t.includes('13:00-13:30')).sort(()=> rng()-0.5);
+      const shuffled = [...times].filter(t => !isRecessTime(t)).sort(()=> rng()-0.5);
       for (const t of shuffled){
         const key = `${d}-${t}`;
         const used = plan[key]?.filter(s=> s.batch===batch && s.subject !== "RECESS BREAK").length || 0;
@@ -267,7 +317,7 @@ function generatePlan(cfg: Config, seed:number){
     const orderDays = [...days].sort(()=> rng()-0.5);
     for (const d of orderDays){
       if (perDayCount[batch][d] >= cfg.maxPerDay) continue;
-      const nonRecessTimes = times.filter(t => !t.includes('13:00-13:30'));
+      const nonRecessTimes = times.filter(t => !isRecessTime(t));
       for (let i=0;i<nonRecessTimes.length-1;i++){
         const t1 = nonRecessTimes[i], t2 = nonRecessTimes[i+1];
         const k1 = `${d}-${t1}`; const k2 = `${d}-${t2}`;
@@ -288,7 +338,7 @@ function generatePlan(cfg: Config, seed:number){
   
   for (const subj of lectureSubjects) {
     // Calculate optimal sessions per week based on available slots
-    const availableSlots = times.filter(t => !t.includes('13:00-13:30')).length;
+    const availableSlots = times.filter(t => !isRecessTime(t)).length;
     const totalSlotsPerWeek = availableSlots * days.length;
     const optimalSessions = Math.max(3, Math.min(6, (subj.perWeek as number)|0));
     
@@ -319,7 +369,7 @@ function generatePlan(cfg: Config, seed:number){
         if (dayAllocs[day] >= maxPerDay) continue;
         
         // Get available time slots (excluding recess)
-        const availableTimes = times.filter(t => !t.includes('13:00-13:30'));
+        const availableTimes = times.filter(t => !isRecessTime(t));
         
         // Try to find an empty slot first, then any available slot
         const emptySlots = availableTimes.filter(time => {
@@ -370,7 +420,7 @@ function generatePlan(cfg: Config, seed:number){
         for (const day of days) {
           if (dayAllocs[day] >= (subj.perDay || 3)) continue;
           
-          const availableTimes = times.filter(t => !t.includes('13:00-13:30'));
+          const availableTimes = times.filter(t => !isRecessTime(t));
           
           for (const time of availableTimes) {
             const assignedRoom = String(100 + rint(cfg.classrooms));
@@ -452,7 +502,7 @@ function generatePlan(cfg: Config, seed:number){
           if (perDayCount[targetBatch][day] >= cfg.maxPerDay) continue;
           
           // Get available time slots (excluding recess) and shuffle them
-          const availableTimes = times.filter(t => !t.includes('13:00-13:30'));
+          const availableTimes = times.filter(t => !isRecessTime(t));
           const shuffledTimes = [...availableTimes].sort(() => rng() - 0.5);
           
           for (let timeIdx = 0; timeIdx < shuffledTimes.length; timeIdx++) {
@@ -526,7 +576,7 @@ function generatePlan(cfg: Config, seed:number){
   // PHASE 3: Fill remaining empty slots with additional sessions for optimal utilization
   console.log('Optimizing timetable by filling empty slots...');
   
-  const availableNonRecessTimes = times.filter(t => !t.includes('13:00-13:30'));
+  const availableNonRecessTimes = times.filter(t => !isRecessTime(t));
   let emptySlots = 0;
   let filledSlots = 0;
   
@@ -583,11 +633,48 @@ function generatePlan(cfg: Config, seed:number){
   console.log(`Optimization complete: Filled ${filledSlots} additional slots`);
   console.log(`Final timetable utilization: ${((availableNonRecessTimes.length * days.length - emptySlots + filledSlots) / (availableNonRecessTimes.length * days.length) * 100).toFixed(1)}%`);
 
+  // Debug: Show final plan with recess breaks and validate conflicts
+  console.log('Final plan with recess breaks:');
+  let conflictCount = 0;
+  for (const day of days) {
+    for (const time of times) {
+      const key = `${day}-${time}`;
+      const slots = plan[key] || [];
+      if (slots.some(slot => slot.subject === "RECESS BREAK")) {
+        console.log(`${key}: RECESS BREAK`);
+        // Check for conflicts - recess breaks should not have other classes
+        const nonRecessSlots = slots.filter(slot => slot.subject !== "RECESS BREAK");
+        if (nonRecessSlots.length > 0) {
+          console.error(`CONFLICT: ${key} has both recess break and classes:`, nonRecessSlots.map(s => s.subject));
+          conflictCount++;
+        }
+      }
+    }
+  }
+  
+  if (conflictCount === 0) {
+    console.log('✅ No recess break conflicts detected');
+  } else {
+    console.error(`❌ Found ${conflictCount} recess break conflicts`);
+  }
+
   return { times, plan };
 }
 
 function detectConflicts(cfg: Config, times:string[], plan: Record<string, Slot[]>) {
   const issues: string[] = [];
+  
+  // Get configured recess slots for validation
+  const configuredRecessSlots: string[] = [];
+  cfg.recess?.forEach(recess => {
+    if (recess.selectedDays && recess.selectedDays.length > 0) {
+      configuredRecessSlots.push(`${recess.start}-${recess.end}`);
+    }
+  });
+  
+  const isRecessTime = (timeSlot: string): boolean => {
+    return configuredRecessSlots.includes(timeSlot);
+  };
   
   for (const d of days){
     for (const t of times){
@@ -595,7 +682,7 @@ function detectConflicts(cfg: Config, times:string[], plan: Record<string, Slot[
       const slots = plan[key] || [];
       
       // Skip recess break slots completely
-      if (t.includes('13:00-13:30') || t === '13:00-13:30') {
+      if (isRecessTime(t)) {
         // Check if there are any non-recess items during recess
         const nonRecessSlots = slots.filter(slot => slot.subject !== "RECESS BREAK");
         if (nonRecessSlots.length > 0) {
@@ -825,19 +912,19 @@ export default function AdminGenerateTimetable(){
                               const key = `${d}-${t}`;
                               const vals = r.plan[key] || [];
                               
-                              // Check if this is a recess break time slot
-                              const isRecessTime = t.includes('13:00-13:30') || t === '13:00-13:30';
+                              // Check if this slot contains a recess break
+                              const hasRecessBreak = vals.some(v => v.subject === "RECESS BREAK");
                               
-                              // For recess time, ONLY show recess break
-                              const displayVals = isRecessTime ? 
-                                [{ subject: "RECESS BREAK", room: "ALL", batch: 0 }] : 
+                              // For recess time, ONLY show recess break; for regular time, show non-recess items
+                              const displayVals = hasRecessBreak ? 
+                                vals.filter(v => v.subject === "RECESS BREAK") : 
                                 vals.filter(v => v.subject !== "RECESS BREAK");
                               
                               return (
-                                <div key={key} className={`p-1 border ${isRecessTime ? 'bg-orange-100 border-orange-300' : displayVals.length? (displayVals.some(v => v.subjectType === 'Practical') ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'):''}}`}>
+                                <div key={key} className={`p-1 border ${hasRecessBreak ? 'bg-orange-100 border-orange-300' : displayVals.length? (displayVals.some(v => v.subjectType === 'Practical') ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'):''}}`}>
                                   <div className="text-[11px] space-y-1">
                                     {displayVals.map((v,i)=> (
-                                      <div key={i} className={isRecessTime ? 'text-orange-700 font-medium' : (v.subjectType === 'Practical' ? 'text-green-700' : 'text-blue-700')}>
+                                      <div key={i} className={hasRecessBreak ? 'text-orange-700 font-medium' : (v.subjectType === 'Practical' ? 'text-green-700' : 'text-blue-700')}>
                                         {v.subject === "RECESS BREAK" ? "🍽️" : (
                                           <div className="space-y-0.5">
                                             <div className="font-medium flex items-center gap-1">
@@ -927,19 +1014,19 @@ export default function AdminGenerateTimetable(){
                               const key = `${d}-${t}`;
                               const vals = fullScreenView.data.plan[key] || [];
                               
-                              // Check if this is a recess break time slot
-                              const isRecessTime = t.includes('13:00-13:30') || t === '13:00-13:30';
+                              // Check if this slot contains a recess break
+                              const hasRecessBreak = vals.some((v: any) => v.subject === "RECESS BREAK");
                               
-                              // For recess time, ONLY show recess break
-                              const displayVals = isRecessTime ? 
-                                [{ subject: "RECESS BREAK", room: "ALL", batch: 0 }] : 
+                              // For recess time, ONLY show recess break; for regular time, show non-recess items
+                              const displayVals = hasRecessBreak ? 
+                                vals.filter((v: any) => v.subject === "RECESS BREAK") : 
                                 vals.filter((v: any) => v.subject !== "RECESS BREAK");
                               
                               return (
-                                <div key={key} className={`p-2 border min-h-[100px] ${isRecessTime ? 'bg-orange-100 border-orange-300' : displayVals.length? (displayVals.some((v: any) => v.subjectType === 'Practical') ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'):''}}`}>
+                                <div key={key} className={`p-2 border min-h-[100px] ${hasRecessBreak ? 'bg-orange-100 border-orange-300' : displayVals.length? (displayVals.some((v: any) => v.subjectType === 'Practical') ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'):''}}`}>
                                   <div className="text-sm space-y-2">
                                     {displayVals.map((v: any, i: number) => (
-                                      <div key={i} className={`p-2 rounded ${isRecessTime ? 'text-orange-700 font-medium bg-orange-200' : (v.subjectType === 'Practical' ? 'text-green-700 bg-green-100' : 'text-blue-700 bg-blue-100')}`}>
+                                      <div key={i} className={`p-2 rounded ${hasRecessBreak ? 'text-orange-700 font-medium bg-orange-200' : (v.subjectType === 'Practical' ? 'text-green-700 bg-green-100' : 'text-blue-700 bg-blue-100')}`}>
                                         {v.subject === "RECESS BREAK" ? "🍽️ RECESS BREAK" : (
                                           <div className="space-y-1">
                                             <div className="font-medium flex items-center gap-2">

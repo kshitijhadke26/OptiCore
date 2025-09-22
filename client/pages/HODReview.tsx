@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Fragment, useMemo, useState } from "react";
+import { Eye, Download, FileText, CheckCircle, XCircle, AlertCircle, Calendar, Users, Clock } from "lucide-react";
 
 interface Submission { id:string; year:string; createdAt:number; times:string[]; plan:Record<string, { subject:string; room:string; batch:number }[]> }
 
@@ -31,6 +32,7 @@ export default function HODReview(){
   const [year, setYear] = useState(search.get('year') || '1');
   const [selected, setSelected] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [fullScreenView, setFullScreenView] = useState<{data: Submission, index: number} | null>(null);
 
   // Load submissions for year; take latest 3 as A/B/C; fallback to synthetic if none
   const plans: Submission[] = useMemo(()=>{
@@ -115,6 +117,14 @@ export default function HODReview(){
   const chosenConflicts = summaries[selected]?.conflicts || [];
   const canApprove = chosenConflicts.length === 0 && !!plans[selected];
 
+  function openFullScreenView(data: Submission, index: number) {
+    setFullScreenView({ data, index });
+  }
+
+  function closeFullScreenView() {
+    setFullScreenView(null);
+  }
+
   return (
     <HODLayout>
       <div className="space-y-5">
@@ -152,28 +162,77 @@ export default function HODReview(){
                 </CardHeader>
                 <CardContent>
                   <div className="mb-3 text-xs text-muted-foreground">Preview</div>
-                  <div className="grid" style={{ gridTemplateColumns: `100px repeat(${DAYS.length}, 1fr)` }}>
-                    <div className="text-[11px] p-1">Time</div>
-                    {DAYS.map(d=> <div key={d} className="text-[11px] p-1 text-center">{d}</div>)}
-                    {sub.times.map((t)=> (
-                      <Fragment key={t}>
-                        <div className="text-[11px] p-1 border-y">{t}</div>
-                        {DAYS.map((d)=>{
-                          const key = `${d}-${t}`; const vals = sub.plan[key]||[];
-                          return <div key={key} className={`p-1 border ${vals.length? 'bg-muted/40':''}`}>
-                            <div className="text-[11px] space-y-1">
-                              {vals.map((v,i)=> <div key={i}>{v.subject} • R-{v.room} • B{v.batch}</div>)}
-                            </div>
-                          </div>;
-                        })}
-                      </Fragment>
-                    ))}
+                  <div className="overflow-x-auto">
+                    <div className="grid" style={{ gridTemplateColumns: `80px repeat(${sub.times.length}, 1fr)` }}>
+                      {/* Header row with time slots */}
+                      <div className="text-[10px] p-1 font-medium">Day</div>
+                      {sub.times.map(t => (
+                        <div key={t} className="text-[10px] p-1 text-center font-medium border-b">
+                          {t}
+                        </div>
+                      ))}
+                      
+                      {/* Rows for each day */}
+                      {DAYS.map((d) => (
+                        <Fragment key={d}>
+                          <div className="text-[10px] p-1 border-r font-medium bg-gray-50">{d}</div>
+                          {sub.times.map((t) => {
+                            const key = `${d}-${t}`;
+                            const vals = sub.plan[key] || [];
+                            const isRecess = vals.some(v => v.subject === "RECESS BREAK");
+                            
+                            return (
+                              <div key={key} className={`p-1 border text-center ${
+                                isRecess ? 'bg-orange-100' : 
+                                vals.length > 0 ? 'bg-blue-100' : 
+                                'bg-gray-50'
+                              }`}>
+                                <div className="text-[9px] space-y-1">
+                                  {vals.map((v, i) => (
+                                    <div key={i} className="leading-tight">
+                                      {v.subject === "RECESS BREAK" ? (
+                                        <span className="font-medium">🍽️</span>
+                                      ) : (
+                                        <>
+                                          <div className="font-medium">📚 {v.subject}</div>
+                                          <div className="text-[8px] text-muted-foreground">
+                                            R-{v.room} • B{v.batch === 0 ? 'All' : v.batch}
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </Fragment>
+                      ))}
+                    </div>
                   </div>
                   {(!approvedId || editing) && (
-                    <div className="mt-3 flex gap-2">
-                      <Button variant="outline" onClick={()=>setSelected(pIndex)}>Select</Button>
-                      <Button variant="outline" onClick={()=>exportCSV(pIndex)}>Export CSV</Button>
-                      <Button variant="outline" onClick={()=>exportExcel(pIndex)}>Export Excel</Button>
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      <Button 
+                        variant={selected === pIndex ? "default" : "outline"} 
+                        size="sm"
+                        onClick={()=>setSelected(pIndex)}
+                        className={selected === pIndex ? "bg-[#079E74] hover:bg-[#068d67]" : ""}
+                      >
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Select
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={()=>exportCSV(pIndex)}>
+                        <Download className="h-3 w-3 mr-1" />
+                        CSV
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={()=>exportExcel(pIndex)}>
+                        <FileText className="h-3 w-3 mr-1" />
+                        Excel
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={()=>openFullScreenView(sub, pIndex)}>
+                        <Eye className="h-3 w-3 mr-1" />
+                        Full View
+                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -227,6 +286,90 @@ export default function HODReview(){
             </div>
           </CardContent>
         </Card>
+
+        {/* Full Screen Modal */}
+        {fullScreenView && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full h-full max-w-7xl max-h-[90vh] overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b">
+                <h2 className="text-xl font-semibold">
+                  Plan {String.fromCharCode(65 + fullScreenView.index)} - Year {year} Timetable
+                </h2>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => exportCSV(fullScreenView.index)}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export CSV
+                  </Button>
+                  <Button variant="outline" onClick={closeFullScreenView}>Close</Button>
+                </div>
+              </div>
+              <div className="p-4 overflow-auto h-full">
+                <div className="overflow-x-auto">
+                  <div className="grid gap-1" style={{ gridTemplateColumns: `120px repeat(${fullScreenView.data.times.length}, 1fr)` }}>
+                    {/* Header */}
+                    <div className="text-sm p-2 font-medium bg-gray-100 border">Day</div>
+                    {fullScreenView.data.times.map((t: string) => (
+                      <div key={t} className="text-sm p-2 text-center font-medium bg-gray-100 border">
+                        {t}
+                      </div>
+                    ))}
+                    
+                    {/* Body */}
+                    {DAYS.map((d) => (
+                      <Fragment key={d}>
+                        <div className="text-sm p-2 font-medium bg-gray-50 border">{d}</div>
+                        {fullScreenView.data.times.map((t: string) => {
+                          const key = `${d}-${t}`;
+                          const vals = fullScreenView.data.plan[key] || [];
+                          const isRecess = vals.some(v => v.subject === "RECESS BREAK");
+                          
+                          return (
+                            <div key={key} className={`p-2 border ${
+                              isRecess ? 'bg-orange-100' : 
+                              vals.length > 0 ? 'bg-blue-100' : 
+                              'bg-gray-50'
+                            }`}>
+                              <div className="text-sm space-y-2">
+                                {vals.length === 0 ? (
+                                  <div className="text-center text-gray-400 text-xs">Empty</div>
+                                ) : (
+                                  vals.map((v, i) => (
+                                    <div key={i} className="p-2 bg-white rounded border">
+                                      {v.subject === "RECESS BREAK" ? (
+                                        <div className="text-center font-medium text-orange-700">
+                                          🍽️ RECESS BREAK
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <div className="font-medium text-gray-900">
+                                            📚 {v.subject}
+                                          </div>
+                                          <div className="text-sm text-gray-600">
+                                            Room: {v.room}
+                                          </div>
+                                          <div className="text-sm text-gray-600">
+                                            {v.batch === 0 ? 'All Batches' : `Batch ${v.batch}`}
+                                          </div>
+                                          <div className="text-xs text-gray-500 mt-1">
+                                            Lecture
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </HODLayout>
   );
