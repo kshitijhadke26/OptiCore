@@ -8,7 +8,7 @@ import { DaySelector } from "@/components/ui/DaySelector";
 import { CheckCircle, AlertCircle, Upload, FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-type Subject = { name: string; perWeek: number; perDay?: number; facultyCount?: number; type?: 'Lecture'|'Practical'; sessionLength?: number; facultyNames?: string[] };
+type Subject = { name: string; perWeek: number; perDay?: number; facultyCount?: number; type?: 'Lecture'|'Practical'; sessionLength?: number; facultyNames?: string[]; manualRooms?: string[]; requiresLab?: boolean; };
 
 type FixedSlot = { subject: string; selectedDays: string[]; time?: string; allDay?: boolean; room?: string; batch?: number };
 
@@ -50,12 +50,14 @@ export default function AdminImportData(){
     subjects: [
       { name: "Mathematics", perWeek: 3, perDay: 1, facultyCount: 3, type:'Lecture', sessionLength:60 },
       { name: "Physics", perWeek: 2, perDay: 1, facultyCount: 2, type:'Lecture', sessionLength:60 },
-      { name: "Programming", perWeek: 3, perDay: 1, facultyCount: 4, type:'Practical', sessionLength:120 },
+      { name: "Programming", perWeek: 3, perDay: 1, facultyCount: 4, type:'Practical', sessionLength:120, manualRooms: ['212L', '213L'], requiresLab: true },
     ],
     maxPerDay: 5,
     avgFacultyLeaves: 1,
     fixedSlots: [],
-    recess: [],
+    recess: [
+      { selectedDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], start: "13:00", end: "13:30" }
+    ],
     sourceFiles: [],
     collegeStartTime: "09:00",
     collegeEndTime: "17:00",
@@ -148,7 +150,7 @@ export default function AdminImportData(){
     }
   }
 
-  function addSubject(){ setCfg((c)=> ({ ...c, subjects: [...c.subjects, { name: "", perWeek: 2, perDay: 1, facultyCount: 1, type:'Lecture', sessionLength:60, facultyNames: [] }] })); }
+  function addSubject(){ setCfg((c)=> ({ ...c, subjects: [...c.subjects, { name: "", perWeek: 2, perDay: 1, facultyCount: 1, type:'Lecture', sessionLength:60, facultyNames: [], manualRooms: [], requiresLab: false }] })); }
   function removeSubject(i:number){ setCfg((c)=> ({ ...c, subjects: c.subjects.filter((_,idx)=> idx!==i) })); }
 
   function addFixed(){ setCfg((c)=> ({ ...c, fixedSlots: [...c.fixedSlots, { subject: c.subjects[0]?.name || "", selectedDays: [days[0]], time: "09:00-10:00", allDay: false, room: "101", batch: 1 }] })); }
@@ -374,6 +376,7 @@ export default function AdminImportData(){
                       <th className="py-2">Max/Day</th>
                       <th className="py-2">Faculty Count</th>
                       <th className="py-2">Faculty Names</th>
+                      <th className="py-2">Room/Lab Assignment</th>
                       <th className="py-2">Actions</th>
                     </tr>
                   </thead>
@@ -382,7 +385,7 @@ export default function AdminImportData(){
                       <tr key={i} className="border-t">
                         <td className="py-2 min-w-40"><Input value={s.name} onChange={e=> setCfg(c=>{ const arr=[...c.subjects]; arr[i] = { ...arr[i], name: e.target.value }; return { ...c, subjects: arr }; })} /></td>
                         <td className="py-2 w-32">
-                          <select className="border rounded-md px-2 py-2 w-full" value={s.type||'Lecture'} onChange={e=> setCfg(c=>{ const arr=[...c.subjects]; const type = e.target.value as 'Lecture'|'Practical'; arr[i] = { ...arr[i], type, sessionLength: type==='Practical'?120:(arr[i].sessionLength||60) }; return { ...c, subjects: arr }; })}>
+                          <select className="border rounded-md px-2 py-2 w-full" value={s.type||'Lecture'} onChange={e=> setCfg(c=>{ const arr=[...c.subjects]; const type = e.target.value as 'Lecture'|'Practical'; arr[i] = { ...arr[i], type, sessionLength: type==='Practical'?120:(arr[i].sessionLength||60), requiresLab: type==='Practical' }; return { ...c, subjects: arr }; })}>
                             <option>Lecture</option>
                             <option>Practical</option>
                           </select>
@@ -397,6 +400,41 @@ export default function AdminImportData(){
                         <td className="py-2 w-28"><Input type="number" value={s.perDay||1} onChange={e=> setCfg(c=>{ const arr=[...c.subjects]; arr[i] = { ...arr[i], perDay: Number(e.target.value) }; return { ...c, subjects: arr }; })} /></td>
                         <td className="py-2 w-28"><Input type="number" value={s.facultyCount|| (s.facultyNames?.length||1)} onChange={e=> setCfg(c=>{ const arr=[...c.subjects]; arr[i] = { ...arr[i], facultyCount: Number(e.target.value) }; return { ...c, subjects: arr }; })} /></td>
                         <td className="py-2 min-w-64"><Input placeholder="Comma/; separated" value={(s.facultyNames||[]).join(', ')} onChange={e=> setCfg(c=>{ const arr=[...c.subjects]; arr[i] = { ...arr[i], facultyNames: e.target.value.split(/;|\||,|\//).map(x=>x.trim()).filter(Boolean) }; return { ...c, subjects: arr }; })} /></td>
+                        <td className="py-2 min-w-48">
+                          <div className="space-y-1">
+                            <Input 
+                              placeholder={s.type === 'Practical' ? "212L, 213L (Labs)" : "Auto-assigned"} 
+                              value={(s.manualRooms||[]).join(', ')} 
+                              disabled={s.type !== 'Practical'}
+                              onChange={e=> setCfg(c=>{ 
+                                const arr=[...c.subjects]; 
+                                arr[i] = { 
+                                  ...arr[i], 
+                                  manualRooms: e.target.value.split(/;|\||,|\//).map(x=>x.trim()).filter(Boolean) 
+                                }; 
+                                return { ...c, subjects: arr }; 
+                              })} 
+                            />
+                            {s.type === 'Practical' && (
+                              <div className="flex items-center gap-1">
+                                <input 
+                                  type="checkbox" 
+                                  className="h-3 w-3 text-[#079E74] rounded border-gray-300" 
+                                  checked={s.requiresLab || false} 
+                                  onChange={e=> setCfg(c=>{ 
+                                    const arr=[...c.subjects]; 
+                                    arr[i] = { ...arr[i], requiresLab: e.target.checked }; 
+                                    return { ...c, subjects: arr }; 
+                                  })} 
+                                />
+                                <span className="text-xs text-muted-foreground">Requires Lab</span>
+                              </div>
+                            )}
+                            {s.type === 'Lecture' && (
+                              <div className="text-xs text-muted-foreground">Rooms auto-assigned</div>
+                            )}
+                          </div>
+                        </td>
                         <td className="py-2"><Button variant="ghost" size="sm" onClick={()=>removeSubject(i)}>Remove</Button></td>
                       </tr>
                     ))}
