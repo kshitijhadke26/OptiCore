@@ -18,10 +18,13 @@ function timesFromMax(maxPerDay:number, collegeStartTime: string = "09:00", coll
   const allSlots: string[] = [];
   let currentTime = startTime;
   
-  // First, collect all unique recess times
+  // First, collect all unique recess times from all selected days
   const uniqueRecessTimes = new Set<string>();
   recessBreaks.forEach(recess => {
-    uniqueRecessTimes.add(`${recess.start}-${recess.end}`);
+    // Only add recess times if they have selected days
+    if (recess.selectedDays && recess.selectedDays.length > 0) {
+      uniqueRecessTimes.add(`${recess.start}-${recess.end}`);
+    }
   });
   
   // Generate time slots, including recess breaks
@@ -77,9 +80,9 @@ function timesFromMax(maxPerDay:number, collegeStartTime: string = "09:00", coll
 
 type Subject = { name: string; perWeek: number; perDay?: number; facultyCount?: number; type?: 'Lecture'|'Practical'; sessionLength?: number };
 
-type FixedSlot = { subject: string; day: string; time?: string; allDay?: boolean; repeatAllDays?: boolean; room?: string; batch?: number };
+type FixedSlot = { subject: string; selectedDays: string[]; time?: string; allDay?: boolean; room?: string; batch?: number };
 
-type RecessBreak = { day: string; start: string; end: string };
+type RecessBreak = { selectedDays: string[]; start: string; end: string };
 
 type Config = {
   year: string;
@@ -122,9 +125,11 @@ function generatePlan(cfg: Config, seed:number){
   // Add recess breaks to the plan as blocked slots for each day they're configured
   for (const recess of recessForAllDays) {
     const recessSlot = `${recess.start}-${recess.end}`;
-    // Always add recess breaks to the plan, regardless of whether they're in times array
-    const key = `${recess.day}-${recessSlot}`;
-    plan[key] = [{ subject: "RECESS BREAK", room: "ALL", batch: 0 }];
+    // Add recess breaks for each selected day
+    for (const day of recess.selectedDays || []) {
+      const key = `${day}-${recessSlot}`;
+      plan[key] = [{ subject: "RECESS BREAK", room: "ALL", batch: 0 }];
+    }
   }
 
   const assign = (day:string, time:string, slot: Slot)=>{
@@ -134,11 +139,10 @@ function generatePlan(cfg: Config, seed:number){
 
   // place fixed slots first
   for (const f of cfg.fixedSlots){
-    if (!f.subject || !f.day) continue;
+    if (!f.subject || !f.selectedDays || f.selectedDays.length === 0) continue;
     const batch = f.batch && f.batch>=1 && f.batch<=cfg.batches? f.batch : 1;
     const room = f.room || String(100 + rint(cfg.classrooms));
-    const dlist = f.repeatAllDays? days : [f.day];
-    for (const d of dlist){
+    for (const d of f.selectedDays){
       if (f.allDay){
         for (const t of times){ assign(d, t, { subject: f.subject, room, batch }); }
       } else if (f.time){

@@ -4,14 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { DaySelector } from "@/components/ui/DaySelector";
 import { CheckCircle, AlertCircle, Upload, FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type Subject = { name: string; perWeek: number; perDay?: number; facultyCount?: number; type?: 'Lecture'|'Practical'; sessionLength?: number; facultyNames?: string[] };
 
-type FixedSlot = { subject: string; day: string; time?: string; allDay?: boolean; room?: string; batch?: number };
+type FixedSlot = { subject: string; selectedDays: string[]; time?: string; allDay?: boolean; room?: string; batch?: number };
 
-type RecessBreak = { day: string; start: string; end: string };
+type RecessBreak = { selectedDays: string[]; start: string; end: string };
 
 type Config = {
   year: string;
@@ -42,7 +43,6 @@ function loadConfig(year: string): Config | null {
 export default function AdminImportData(){
   const [year, setYear] = useState("1");
   const [mappingPreview, setMappingPreview] = useState<{detected: string[], mapped: Record<string, string>} | null>(null);
-  const [allDaysSelected, setAllDaysSelected] = useState(false);
   const [cfg, setCfg] = useState<Config>(() => loadConfig("1") || {
     year: "1",
     classrooms: 10,
@@ -151,59 +151,23 @@ export default function AdminImportData(){
   function addSubject(){ setCfg((c)=> ({ ...c, subjects: [...c.subjects, { name: "", perWeek: 2, perDay: 1, facultyCount: 1, type:'Lecture', sessionLength:60, facultyNames: [] }] })); }
   function removeSubject(i:number){ setCfg((c)=> ({ ...c, subjects: c.subjects.filter((_,idx)=> idx!==i) })); }
 
-  function addFixed(){ setCfg((c)=> ({ ...c, fixedSlots: [...c.fixedSlots, { subject: c.subjects[0]?.name || "", day: days[0], time: "09:00-10:00", allDay: false, room: "101", batch: 1 }] })); }
+  function addFixed(){ setCfg((c)=> ({ ...c, fixedSlots: [...c.fixedSlots, { subject: c.subjects[0]?.name || "", selectedDays: [days[0]], time: "09:00-10:00", allDay: false, room: "101", batch: 1 }] })); }
   function removeFixed(i:number){ setCfg((c)=> ({ ...c, fixedSlots: c.fixedSlots.filter((_,idx)=> idx!==i) })); }
 
   // Handle All Day functionality for fixed slots
   function handleAllDayToggle(index: number, checked: boolean) {
-    if (checked) {
-      // When All Day is checked, create slots for all days
-      setCfg(c => {
-        const currentSlot = c.fixedSlots[index];
-        const newSlots = [...c.fixedSlots];
-        
-        // Remove the current slot
-        newSlots.splice(index, 1);
-        
-        // Add slots for all days
-        days.forEach(day => {
-          newSlots.push({
-            ...currentSlot,
-            day,
-            allDay: true,
-            time: undefined
-          });
-        });
-        
-        return { ...c, fixedSlots: newSlots };
-      });
-    } else {
-      // When unchecked, just update the current slot
-      setCfg(c => {
-        const arr = [...c.fixedSlots];
-        arr[index] = { ...arr[index], allDay: false, time: "09:00-10:00" };
-        return { ...c, fixedSlots: arr };
-      });
-    }
+    setCfg(c => {
+      const arr = [...c.fixedSlots];
+      arr[index] = { 
+        ...arr[index], 
+        allDay: checked, 
+        time: checked ? undefined : "09:00-10:00",
+        selectedDays: checked ? days : (arr[index].selectedDays.length > 0 ? arr[index].selectedDays : [days[0]])
+      };
+      return { ...c, fixedSlots: arr };
+    });
   }
 
-  // Handle All Days selection for recess breaks
-  function handleAllDaysToggle(checked: boolean) {
-    setAllDaysSelected(checked);
-    if (checked) {
-      // Add recess breaks for all days if not present
-      const existingDays = new Set((cfg.recess || []).map(r => r.day));
-      const newRecess = [...(cfg.recess || [])];
-      
-      days.forEach(day => {
-        if (!existingDays.has(day)) {
-          newRecess.push({ day, start: "12:00", end: "12:30" });
-        }
-      });
-      
-      setCfg(c => ({ ...c, recess: newRecess }));
-    }
-  }
 
   function save(){
     const toSave: Config = { ...cfg, year };
@@ -446,69 +410,75 @@ export default function AdminImportData(){
                 <Label className="text-base font-medium">Special Fixed Slots</Label>
                 <Button variant="outline" size="sm" onClick={addFixed}>Add Fixed Slot</Button>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {cfg.fixedSlots.length===0 && (
                   <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-lg text-center">
                     No fixed slots added. Click "Add Fixed Slot" to create subject-specific time slots.
                   </div>
                 )}
                 {cfg.fixedSlots.map((f,i)=> (
-                  <div key={i} className="grid md:grid-cols-6 gap-3 items-end p-3 border rounded-lg bg-gray-50">
-                    <div>
-                      <Label className="text-sm font-medium">Subject</Label>
-                      <Input value={f.subject} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], subject: e.target.value }; return { ...c, fixedSlots: arr }; })} />
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Day</Label>
-                      <select 
-                        className="border rounded-md px-2 py-2 w-full disabled:bg-gray-100 disabled:cursor-not-allowed" 
-                        value={f.day} 
-                        disabled={!!f.allDay}
-                        onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], day: e.target.value }; return { ...c, fixedSlots: arr }; })}
-                      >
-                        {days.map(d=> <option key={d} value={d}>{d}</option>)}
-                      </select>
-                      {f.allDay && (
-                        <div className="text-xs text-blue-600 mt-1">Applied to all days</div>
-                      )}
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Apply to All Days</Label>
-                      <div className="flex items-center gap-2 mt-2">
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4 text-[#079E74] rounded border-gray-300 focus:ring-[#079E74]" 
-                          checked={!!f.allDay} 
-                          onChange={e=> handleAllDayToggle(i, e.target.checked)} 
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {f.allDay ? 'All days' : 'Single day'}
-                        </span>
+                  <div key={i} className="p-4 border rounded-lg bg-gray-50 space-y-4">
+                    {/* First Row: Basic Info */}
+                    <div className="grid md:grid-cols-4 gap-3">
+                      <div>
+                        <Label className="text-sm font-medium">Subject</Label>
+                        <Input value={f.subject} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], subject: e.target.value }; return { ...c, fixedSlots: arr }; })} />
                       </div>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Time Slot</Label>
-                      <Input 
-                        type="text" 
-                        placeholder="09:00-10:00" 
-                        disabled={!!f.allDay} 
-                        value={f.time||""} 
-                        onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], time: e.target.value }; return { ...c, fixedSlots: arr }; })} 
-                      />
-                      {f.allDay && (
-                        <div className="text-xs text-muted-foreground mt-1">Full day slot</div>
-                      )}
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Room</Label>
-                      <Input placeholder="101" value={f.room||""} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], room: e.target.value }; return { ...c, fixedSlots: arr }; })} />
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="flex-1">
+                      <div>
+                        <Label className="text-sm font-medium">Time Slot</Label>
+                        <Input 
+                          type="text" 
+                          placeholder="09:00-10:00" 
+                          disabled={!!f.allDay} 
+                          value={f.time||""} 
+                          onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], time: e.target.value }; return { ...c, fixedSlots: arr }; })} 
+                        />
+                        {f.allDay && (
+                          <div className="text-xs text-muted-foreground mt-1">Full day slot</div>
+                        )}
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Room</Label>
+                        <Input placeholder="101" value={f.room||""} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], room: e.target.value }; return { ...c, fixedSlots: arr }; })} />
+                      </div>
+                      <div>
                         <Label className="text-sm font-medium">Batch</Label>
                         <Input type="number" value={f.batch||1} onChange={e=> setCfg(c=>{ const arr=[...c.fixedSlots]; arr[i] = { ...arr[i], batch: Number(e.target.value) }; return { ...c, fixedSlots: arr }; })} />
                       </div>
-                      <Button variant="ghost" size="sm" onClick={()=>removeFixed(i)}>Remove</Button>
+                    </div>
+
+                    {/* Second Row: Day Selection and All Day Toggle */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <DaySelector
+                        selectedDays={f.selectedDays || []}
+                        onDaysChange={(selectedDays) => setCfg(c => {
+                          const arr = [...c.fixedSlots];
+                          arr[i] = { ...arr[i], selectedDays };
+                          return { ...c, fixedSlots: arr };
+                        })}
+                        label="Apply to Days"
+                      />
+                      <div className="space-y-3">
+                        <div>
+                          <Label className="text-sm font-medium">All Day Schedule</Label>
+                          <div className="flex items-center gap-2 mt-2">
+                            <input 
+                              type="checkbox" 
+                              className="h-4 w-4 text-[#079E74] rounded border-gray-300 focus:ring-[#079E74]" 
+                              checked={!!f.allDay} 
+                              onChange={e=> handleAllDayToggle(i, e.target.checked)} 
+                            />
+                            <span className="text-sm text-muted-foreground">
+                              {f.allDay ? 'Occupies entire day' : 'Specific time slot only'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button variant="ghost" size="sm" onClick={()=>removeFixed(i)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -518,78 +488,68 @@ export default function AdminImportData(){
             <div>
               <div className="flex items-center justify-between mb-4 mt-4">
                 <Label className="text-base font-medium">Recess Breaks Configuration</Label>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="checkbox" 
-                      id="allDays" 
-                      className="h-4 w-4 text-[#079E74] rounded border-gray-300 focus:ring-[#079E74]" 
-                      checked={allDaysSelected} 
-                      onChange={(e) => handleAllDaysToggle(e.target.checked)} 
-                    />
-                    <Label htmlFor="allDays" className="text-sm font-medium">Apply to All Days</Label>
-                  </div>
-                  {!allDaysSelected && (
-                    <Button variant="outline" size="sm" onClick={()=> setCfg(c=> ({ ...c, recess: [...(c.recess||[]), { day: days[0], start: "12:00", end: "12:30" }] }))}>Add Recess</Button>
-                  )}
-                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={()=> setCfg(c=> ({ ...c, recess: [...(c.recess||[]), { selectedDays: [days[0]], start: "12:00", end: "12:30" }] }))}
+                >
+                  Add Recess Break
+                </Button>
               </div>
 
-              {allDaysSelected && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-800">All Days Mode Active</span>
-                  </div>
-                  <p className="text-xs text-blue-700">Recess breaks will be automatically applied to all working days. Individual day selection is disabled.</p>
-                </div>
-              )}
-
-              <div className="space-y-3">
-                {(cfg.recess||[]).length===0 && !allDaysSelected && (
+              <div className="space-y-4">
+                {(cfg.recess||[]).length===0 && (
                   <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-lg text-center">
-                    No recess breaks configured. Click "Add Recess" or enable "Apply to All Days" for automatic setup.
+                    No recess breaks configured. Click "Add Recess Break" to create break periods.
                   </div>
                 )}
                 
                 {(cfg.recess||[]).map((r,i)=> (
-                  <div key={i} className="grid md:grid-cols-5 gap-3 items-end p-3 border rounded-lg bg-gray-50">
-                    <div>
-                      <Label className="text-sm font-medium">Day</Label>
-                      <select 
-                        className="border rounded-md px-2 py-2 w-full disabled:bg-gray-100 disabled:cursor-not-allowed" 
-                        value={r.day} 
-                        disabled={allDaysSelected}
-                        onChange={e=> setCfg(c=>{ const arr=[...(c.recess||[])]; arr[i] = { ...arr[i], day: e.target.value }; return { ...c, recess: arr }; })}
-                      >
-                        {days.map(d=> <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Start Time</Label>
-                      <Input type="time" value={r.start} onChange={e=> setCfg(c=>{ const arr=[...(c.recess||[])]; arr[i] = { ...arr[i], start: e.target.value }; return { ...c, recess: arr }; })} />
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">End Time</Label>
-                      <Input type="time" value={r.end} onChange={e=> setCfg(c=>{ const arr=[...(c.recess||[])]; arr[i] = { ...arr[i], end: e.target.value }; return { ...c, recess: arr }; })} />
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Duration</Label>
-                      <div className="text-sm text-muted-foreground py-2 px-3 bg-white border rounded-md">
-                        {(() => {
-                          const start = new Date(`2000-01-01T${r.start}:00`);
-                          const end = new Date(`2000-01-01T${r.end}:00`);
-                          const diff = (end.getTime() - start.getTime()) / (1000 * 60);
-                          return `${diff} min`;
-                        })()}
+                  <div key={i} className="p-4 border rounded-lg bg-gray-50 space-y-4">
+                    {/* First Row: Time Configuration */}
+                    <div className="grid md:grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-sm font-medium">Start Time</Label>
+                        <Input type="time" value={r.start} onChange={e=> setCfg(c=>{ const arr=[...(c.recess||[])]; arr[i] = { ...arr[i], start: e.target.value }; return { ...c, recess: arr }; })} />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">End Time</Label>
+                        <Input type="time" value={r.end} onChange={e=> setCfg(c=>{ const arr=[...(c.recess||[])]; arr[i] = { ...arr[i], end: e.target.value }; return { ...c, recess: arr }; })} />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Duration</Label>
+                        <div className="text-sm text-muted-foreground py-2 px-3 bg-white border rounded-md">
+                          {(() => {
+                            const start = new Date(`2000-01-01T${r.start}:00`);
+                            const end = new Date(`2000-01-01T${r.end}:00`);
+                            const diff = (end.getTime() - start.getTime()) / (1000 * 60);
+                            return `${diff} min`;
+                          })()}
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      {!allDaysSelected && (
-                        <Button variant="ghost" size="sm" onClick={()=> setCfg(c=> ({ ...c, recess: (c.recess||[]).filter((_,idx)=> idx!==i) }))}>
+
+                    {/* Second Row: Day Selection and Remove Button */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <DaySelector
+                        selectedDays={r.selectedDays || []}
+                        onDaysChange={(selectedDays) => setCfg(c => {
+                          const arr = [...(c.recess || [])];
+                          arr[i] = { ...arr[i], selectedDays };
+                          return { ...c, recess: arr };
+                        })}
+                        label="Apply to Days"
+                      />
+                      <div className="flex justify-end items-end">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={()=> setCfg(c=> ({ ...c, recess: (c.recess||[]).filter((_,idx)=> idx!==i) }))}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
                           Remove
                         </Button>
-                      )}
+                      </div>
                     </div>
                   </div>
                 ))}
