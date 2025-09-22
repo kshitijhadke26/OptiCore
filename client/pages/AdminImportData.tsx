@@ -153,7 +153,11 @@ export default function AdminImportData(){
   function addSubject(){ setCfg((c)=> ({ ...c, subjects: [...c.subjects, { name: "", perWeek: 2, perDay: 1, facultyCount: 1, type:'Lecture', sessionLength:60, facultyNames: [], manualRooms: [], requiresLab: false }] })); }
   function removeSubject(i:number){ setCfg((c)=> ({ ...c, subjects: c.subjects.filter((_,idx)=> idx!==i) })); }
 
-  function addFixed(){ setCfg((c)=> ({ ...c, fixedSlots: [...c.fixedSlots, { subject: c.subjects[0]?.name || "", selectedDays: [days[0]], time: "09:00-10:00", allDay: false, room: "101", batch: 1 }] })); }
+  function addFixed(){ 
+    if (cfg.fixedSlots.length === 0) {
+      setCfg((c)=> ({ ...c, fixedSlots: [{ subject: c.subjects[0]?.name || "", selectedDays: [days[0]], time: "09:00-10:00", allDay: false, room: "101", batch: 1 }] })); 
+    }
+  }
   function removeFixed(i:number){ setCfg((c)=> ({ ...c, fixedSlots: c.fixedSlots.filter((_,idx)=> idx!==i) })); }
 
   // Handle All Day functionality for fixed slots
@@ -445,16 +449,16 @@ export default function AdminImportData(){
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <Label className="text-base font-medium">Special Fixed Slots</Label>
-                <Button variant="outline" size="sm" onClick={addFixed}>Add Fixed Slot</Button>
+                <Label className="text-base font-medium">Special Fixed Slot</Label>
               </div>
               <div className="space-y-4">
                 {cfg.fixedSlots.length===0 && (
-                  <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-lg text-center">
-                    No fixed slots added. Click "Add Fixed Slot" to create subject-specific time slots.
+                  <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-lg text-center space-y-3">
+                    <p>Configure a special fixed slot for subject-specific scheduling.</p>
+                    <Button variant="outline" size="sm" onClick={addFixed}>Add Fixed Slot</Button>
                   </div>
                 )}
-                {cfg.fixedSlots.map((f,i)=> (
+                {cfg.fixedSlots.slice(0, 1).map((f,i)=> (
                   <div key={i} className="p-4 border rounded-lg bg-gray-50 space-y-4">
                     {/* First Row: Basic Info */}
                     <div className="grid md:grid-cols-4 gap-3">
@@ -512,8 +516,13 @@ export default function AdminImportData(){
                           </div>
                         </div>
                         <div className="flex justify-end">
-                          <Button variant="ghost" size="sm" onClick={()=>removeFixed(i)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                            Remove
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={()=> setCfg(c=> ({ ...c, fixedSlots: [] }))}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            Clear
                           </Button>
                         </div>
                       </div>
@@ -525,24 +534,24 @@ export default function AdminImportData(){
 
             <div>
               <div className="flex items-center justify-between mb-4 mt-4">
-                <Label className="text-base font-medium">Recess Breaks Configuration</Label>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={()=> setCfg(c=> ({ ...c, recess: [...(c.recess||[]), { selectedDays: [days[0]], start: "12:00", end: "12:30" }] }))}
-                >
-                  Add Recess Break
-                </Button>
+                <Label className="text-base font-medium">Recess Break Configuration</Label>
               </div>
 
               <div className="space-y-4">
                 {(cfg.recess||[]).length===0 && (
-                  <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-lg text-center">
-                    No recess breaks configured. Click "Add Recess Break" to create break periods.
+                  <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-lg text-center space-y-3">
+                    <p>Configure the mandatory recess break period (default: 01:00 PM - 01:30 PM).</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={()=> setCfg(c=> ({ ...c, recess: [{ selectedDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], start: "13:00", end: "13:30" }] }))}
+                    >
+                      Add Recess Break
+                    </Button>
                   </div>
                 )}
                 
-                {(cfg.recess||[]).map((r,i)=> (
+                {(cfg.recess||[]).slice(0, 1).map((r,i)=> (
                   <div key={i} className="p-4 border rounded-lg bg-gray-50 space-y-4">
                     {/* First Row: Time Configuration */}
                     <div className="grid md:grid-cols-3 gap-3">
@@ -582,10 +591,10 @@ export default function AdminImportData(){
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          onClick={()=> setCfg(c=> ({ ...c, recess: (c.recess||[]).filter((_,idx)=> idx!==i) }))}
+                          onClick={()=> setCfg(c=> ({ ...c, recess: [] }))}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
-                          Remove
+                          Clear
                         </Button>
                       </div>
                     </div>

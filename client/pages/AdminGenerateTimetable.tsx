@@ -6,7 +6,7 @@ import { Fragment, useMemo, useState } from "react";
 const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
 function timesFromMax(maxPerDay:number, collegeStartTime: string = "09:00", collegeEndTime: string = "17:00", sessionDuration: number = 60, recessBreaks: RecessBreak[] = []){
-  // Generate time slots based on college hours and session duration
+  // Generate comprehensive time slots for optimal timetable coverage
   const startHour = parseInt(collegeStartTime.split(':')[0]);
   const startMinute = parseInt(collegeStartTime.split(':')[1]);
   const endHour = parseInt(collegeEndTime.split(':')[0]);
@@ -16,68 +16,66 @@ function timesFromMax(maxPerDay:number, collegeStartTime: string = "09:00", coll
   const endTime = endHour * 60 + endMinute;
   
   const allSlots: string[] = [];
+  
+  // Always include mandatory recess break (01:00 PM–01:30 PM)
+  const mandatoryRecess = { start: "13:00", end: "13:30" };
+  const recessStart = 13 * 60; // 13:00 in minutes
+  const recessEnd = 13 * 60 + 30; // 13:30 in minutes
+  
+  // Generate morning slots (before recess)
   let currentTime = startTime;
+  while (currentTime + sessionDuration <= recessStart) {
+    const startH = Math.floor(currentTime / 60);
+    const startM = currentTime % 60;
+    const endT = currentTime + sessionDuration;
+    const endH = Math.floor(endT / 60);
+    const endM = endT % 60;
+    
+    const timeSlot = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}-${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+    allSlots.push(timeSlot);
+    currentTime += sessionDuration;
+  }
   
-  // Always include mandatory recess break (01:00 PM–01:30 PM) for all days
-  const mandatoryRecess = "13:00-13:30";
-  const uniqueRecessTimes = new Set<string>([mandatoryRecess]);
+  // Add mandatory recess break
+  allSlots.push(`${mandatoryRecess.start}-${mandatoryRecess.end}`);
   
-  // Add configured recess breaks
+  // Generate afternoon slots (after recess)
+  currentTime = recessEnd;
+  while (currentTime + sessionDuration <= endTime) {
+    const startH = Math.floor(currentTime / 60);
+    const startM = currentTime % 60;
+    const endT = currentTime + sessionDuration;
+    const endH = Math.floor(endT / 60);
+    const endM = endT % 60;
+    
+    const timeSlot = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}-${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+    allSlots.push(timeSlot);
+    currentTime += sessionDuration;
+  }
+  
+  // Add configured additional recess breaks if any
   recessBreaks.forEach(recess => {
     if (recess.selectedDays && recess.selectedDays.length > 0) {
-      uniqueRecessTimes.add(`${recess.start}-${recess.end}`);
+      const additionalRecess = `${recess.start}-${recess.end}`;
+      if (!allSlots.includes(additionalRecess) && additionalRecess !== `${mandatoryRecess.start}-${mandatoryRecess.end}`) {
+        allSlots.push(additionalRecess);
+      }
     }
   });
   
-  // Generate time slots, including recess breaks
-  while (currentTime < endTime) {
-    const startH = Math.floor(currentTime / 60);
-    const startM = currentTime % 60;
-    const currentTimeStr = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}`;
-    
-    // Check if this time matches any recess break start
-    const matchingRecess = Array.from(uniqueRecessTimes).find(recessSlot => {
-      const [start] = recessSlot.split('-');
-      return start === currentTimeStr;
-    });
-    
-    if (matchingRecess) {
-      // Add recess break slot
-      allSlots.push(matchingRecess);
-      
-      // Skip to end of recess
-      const [, end] = matchingRecess.split('-');
-      const [endH, endM] = end.split(':').map(Number);
-      currentTime = endH * 60 + endM;
-    } else {
-      // Generate regular class slot
-      const endT = currentTime + sessionDuration;
-      
-      if (endT <= endTime) {
-        const endH = Math.floor(endT / 60);
-        const endM = endT % 60;
-        const timeSlot = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}-${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
-        
-        // Check if this slot would conflict with any recess break
-        const hasRecessConflict = Array.from(uniqueRecessTimes).some(recessSlot => {
-          const [rStart, rEnd] = recessSlot.split('-');
-          const [rStartH, rStartM] = rStart.split(':').map(Number);
-          const [rEndH, rEndM] = rEnd.split(':').map(Number);
-          const recessStart = rStartH * 60 + rStartM;
-          const recessEnd = rEndH * 60 + rEndM;
-          return (currentTime < recessEnd && endT > recessStart);
-        });
-        
-        if (!hasRecessConflict) {
-          allSlots.push(timeSlot);
-        }
-      }
-      
-      currentTime += sessionDuration;
-    }
-  }
+  // Sort all slots chronologically
+  const sortedSlots = allSlots.sort((a, b) => {
+    const [aStart] = a.split('-');
+    const [bStart] = b.split('-');
+    const [aHour, aMin] = aStart.split(':').map(Number);
+    const [bHour, bMin] = bStart.split(':').map(Number);
+    const aTime = aHour * 60 + aMin;
+    const bTime = bHour * 60 + bMin;
+    return aTime - bTime;
+  });
   
-  return allSlots.length > 0 ? allSlots : ["09:00-10:00"]; // Fallback
+  console.log('Generated time slots:', sortedSlots);
+  return sortedSlots.length > 0 ? sortedSlots : ["09:00-10:00", "10:00-11:00", "11:00-12:00", "12:00-13:00", "13:00-13:30", "13:30-14:30", "14:30-15:30", "15:30-16:30"];
 }
 
 type Subject = { name: string; perWeek: number; perDay?: number; facultyCount?: number; type?: 'Lecture'|'Practical'; sessionLength?: number; facultyNames?: string[]; manualRooms?: string[]; requiresLab?: boolean; };
@@ -286,25 +284,54 @@ function generatePlan(cfg: Config, seed:number){
   const practicalSubjects = cfg.subjects.filter(s => s.type === 'Practical');
   
   console.log('Scheduling lectures first...');
+  console.log(`Found ${lectureSubjects.length} lecture subjects:`, lectureSubjects.map(s => `${s.name} (${s.perWeek} per week)`));
+  
   for (const subj of lectureSubjects) {
-    let remaining = Math.max(1, (subj.perWeek as number)|0);
+    // Calculate optimal sessions per week based on available slots
+    const availableSlots = times.filter(t => !t.includes('13:00-13:30')).length;
+    const totalSlotsPerWeek = availableSlots * days.length;
+    const optimalSessions = Math.max(3, Math.min(6, (subj.perWeek as number)|0));
+    
+    let remaining = optimalSessions;
     const facultyList = subj.facultyNames || [];
     
     let sessionCount = remaining;
     let dayAllocs: Record<string, number> = {}; 
     days.forEach(d=> dayAllocs[d]=0);
     
+    console.log(`Scheduling ${sessionCount} sessions for ${subj.name} (optimal distribution)`);
+    
+    // Priority-based scheduling: distribute evenly across all days first
+    const maxPerDay = Math.ceil(sessionCount / days.length);
+    
     while (sessionCount > 0) {
       let scheduled = false;
       
-      // Try all days including Friday and Saturday
-      for (const day of days) {
-        if (dayAllocs[day] >= (subj.perDay || 1)) continue;
+      // Find days with minimum allocations first for even distribution
+      const sortedDays = [...days].sort((a, b) => {
+        const aCount = dayAllocs[a];
+        const bCount = dayAllocs[b];
+        if (aCount !== bCount) return aCount - bCount;
+        return rng() - 0.5; // Random tiebreaker
+      });
+      
+      for (const day of sortedDays) {
+        if (dayAllocs[day] >= maxPerDay) continue;
         
         // Get available time slots (excluding recess)
         const availableTimes = times.filter(t => !t.includes('13:00-13:30'));
         
-        for (const time of availableTimes) {
+        // Try to find an empty slot first, then any available slot
+        const emptySlots = availableTimes.filter(time => {
+          const key = `${day}-${time}`;
+          const existingSlots = plan[key] || [];
+          return existingSlots.length === 0;
+        });
+        
+        const slotsToTry = emptySlots.length > 0 ? emptySlots : availableTimes;
+        const shuffledTimes = [...slotsToTry].sort(() => rng() - 0.5);
+        
+        for (const time of shuffledTimes) {
           // Auto-assign room for lectures
           const assignedRoom = String(100 + rint(cfg.classrooms));
           
@@ -329,26 +356,72 @@ function generatePlan(cfg: Config, seed:number){
           dayAllocs[day]++;
           sessionCount--;
           scheduled = true;
+          console.log(`Scheduled ${subj.name} on ${day} at ${time} (${dayAllocs[day]}/${maxPerDay} for this day)`);
           break;
         }
         if (scheduled) break;
       }
       
-      // If couldn't schedule, break to avoid infinite loop
+      // If couldn't schedule with current constraints, try with relaxed constraints
+      if (!scheduled && sessionCount > 0) {
+        console.log(`Relaxing constraints for ${subj.name}, remaining: ${sessionCount}`);
+        
+        // Try any day with available slots
+        for (const day of days) {
+          if (dayAllocs[day] >= (subj.perDay || 3)) continue;
+          
+          const availableTimes = times.filter(t => !t.includes('13:00-13:30'));
+          
+          for (const time of availableTimes) {
+            const assignedRoom = String(100 + rint(cfg.classrooms));
+            const assignedFaculty = facultyList.length > 0 ? 
+              facultyList[rint(facultyList.length)] : undefined;
+            
+            if (checkConflicts(day, time, assignedRoom, 0, assignedFaculty, subj.name, 'Lecture')) continue;
+            
+            const slotData: Slot = {
+              subject: subj.name,
+              room: assignedRoom,
+              batch: 0,
+              faculty: assignedFaculty,
+              subjectType: 'Lecture'
+            };
+            
+            assign(day, time, slotData);
+            recordAssignment(day, time, assignedRoom, 0, assignedFaculty);
+            dayAllocs[day]++;
+            sessionCount--;
+            scheduled = true;
+            console.log(`Scheduled ${subj.name} on ${day} at ${time} (relaxed constraints)`);
+            break;
+          }
+          if (scheduled) break;
+        }
+      }
+      
+      // If still couldn't schedule, break to avoid infinite loop
       if (!scheduled) {
-        console.warn(`Could not schedule all sessions for lecture: ${subj.name}`);
+        console.warn(`Could not schedule remaining sessions for lecture: ${subj.name}. Remaining: ${sessionCount}`);
         break;
       }
     }
+    
+    console.log(`Final allocation for ${subj.name}:`, dayAllocs);
   }
   
   console.log('Scheduling practicals second...');
+  console.log(`Found ${practicalSubjects.length} practical subjects:`, practicalSubjects.map(s => `${s.name} (${s.perWeek} per week)`));
+  
   // PHASE 2: Schedule ALL PRACTICALS after lectures (complete separation)
   for (const subj of practicalSubjects) {
-    let remaining = Math.max(1, (subj.perWeek as number)|0);
+    // Calculate optimal sessions per week for practicals
+    const optimalSessions = Math.max(2, Math.min(4, (subj.perWeek as number)|0));
+    let remaining = optimalSessions;
     const facultyList = subj.facultyNames || [];
     const manualRooms = subj.manualRooms || [];
     const dur = subj.sessionLength || 120;
+    
+    console.log(`Scheduling practical ${subj.name} with ${remaining} sessions per batch (optimal distribution)`);
     
     // Split into individual batches for practicals
     const batchesToSchedule = Array.from({length: cfg.batches}, (_, i) => i + 1);
@@ -358,22 +431,36 @@ function generatePlan(cfg: Config, seed:number){
       let dayAllocs: Record<string, number> = {}; 
       days.forEach(d=> dayAllocs[d]=0);
       
+      console.log(`Scheduling ${sessionCount} sessions for ${subj.name} - Batch ${targetBatch}`);
+      
+      // Priority-based scheduling for practicals: spread across days
+      const maxPerDay = Math.ceil(sessionCount / days.length);
+      
       while (sessionCount > 0) {
         let scheduled = false;
         
-        // Try to find available slot
-        for (const day of days) {
+        // Find days with minimum allocations first for even distribution
+        const sortedDays = [...days].sort((a, b) => {
+          const aCount = dayAllocs[a] + perDayCount[targetBatch][a];
+          const bCount = dayAllocs[b] + perDayCount[targetBatch][b];
+          if (aCount !== bCount) return aCount - bCount;
+          return rng() - 0.5; // Random tiebreaker
+        });
+        
+        for (const day of sortedDays) {
           if (dayAllocs[day] >= (subj.perDay || 1)) continue;
           if (perDayCount[targetBatch][day] >= cfg.maxPerDay) continue;
           
-          // Get available time slots (excluding recess)
+          // Get available time slots (excluding recess) and shuffle them
           const availableTimes = times.filter(t => !t.includes('13:00-13:30'));
+          const shuffledTimes = [...availableTimes].sort(() => rng() - 0.5);
           
-          for (let timeIdx = 0; timeIdx < availableTimes.length; timeIdx++) {
-            const time = availableTimes[timeIdx];
+          for (let timeIdx = 0; timeIdx < shuffledTimes.length; timeIdx++) {
+            const time = shuffledTimes[timeIdx];
             
             // For 2-hour sessions, check if next slot is also available
-            const nextTime = dur === 120 && timeIdx < availableTimes.length - 1 ? availableTimes[timeIdx + 1] : null;
+            const nextTimeIdx = availableTimes.indexOf(time) + 1;
+            const nextTime = dur === 120 && nextTimeIdx < availableTimes.length ? availableTimes[nextTimeIdx] : null;
             
             // Use manual room assignment for practicals
             let assignedRoom: string;
@@ -411,9 +498,11 @@ function generatePlan(cfg: Config, seed:number){
               recordAssignment(day, nextTime, assignedRoom, targetBatch, assignedFaculty);
               perDayCount[targetBatch][day] += 2;
               dayAllocs[day] += 2;
+              console.log(`Scheduled ${subj.name} (Batch ${targetBatch}) on ${day} at ${time}-${nextTime} (2-hour session)`);
             } else {
               perDayCount[targetBatch][day]++;
               dayAllocs[day]++;
+              console.log(`Scheduled ${subj.name} (Batch ${targetBatch}) on ${day} at ${time}`);
             }
             
             sessionCount--;
@@ -425,12 +514,74 @@ function generatePlan(cfg: Config, seed:number){
         
         // If couldn't schedule, break to avoid infinite loop
         if (!scheduled) {
-          console.warn(`Could not schedule all sessions for practical: ${subj.name}, batch: ${targetBatch}`);
+          console.warn(`Could not schedule all sessions for practical: ${subj.name}, batch: ${targetBatch}. Remaining: ${sessionCount}`);
           break;
+        }
+      }
+      
+      console.log(`Final allocation for ${subj.name} - Batch ${targetBatch}:`, dayAllocs);
+    }
+  }
+
+  // PHASE 3: Fill remaining empty slots with additional sessions for optimal utilization
+  console.log('Optimizing timetable by filling empty slots...');
+  
+  const availableNonRecessTimes = times.filter(t => !t.includes('13:00-13:30'));
+  let emptySlots = 0;
+  let filledSlots = 0;
+  
+  // Count empty slots
+  for (const day of days) {
+    for (const time of availableNonRecessTimes) {
+      const key = `${day}-${time}`;
+      const existingSlots = plan[key] || [];
+      const nonRecessSlots = existingSlots.filter(slot => slot.subject !== "RECESS BREAK");
+      if (nonRecessSlots.length === 0) {
+        emptySlots++;
+      }
+    }
+  }
+  
+  console.log(`Found ${emptySlots} empty slots to optimize`);
+  
+  // Try to fill empty slots with additional lectures
+  if (emptySlots > 0 && lectureSubjects.length > 0) {
+    for (const day of days) {
+      for (const time of availableNonRecessTimes) {
+        const key = `${day}-${time}`;
+        const existingSlots = plan[key] || [];
+        const nonRecessSlots = existingSlots.filter(slot => slot.subject !== "RECESS BREAK");
+        
+        if (nonRecessSlots.length === 0 && filledSlots < Math.min(emptySlots, lectureSubjects.length * 2)) {
+          // Try to add an additional lecture session
+          const subj = lectureSubjects[filledSlots % lectureSubjects.length];
+          const assignedRoom = String(100 + rint(cfg.classrooms));
+          const facultyList = subj.facultyNames || [];
+          const assignedFaculty = facultyList.length > 0 ? 
+            facultyList[rint(facultyList.length)] : undefined;
+          
+          // Check if we can add this without conflicts
+          if (!checkConflicts(day, time, assignedRoom, 0, assignedFaculty, subj.name, 'Lecture')) {
+            const slotData: Slot = {
+              subject: subj.name,
+              room: assignedRoom,
+              batch: 0,
+              faculty: assignedFaculty,
+              subjectType: 'Lecture'
+            };
+            
+            assign(day, time, slotData);
+            recordAssignment(day, time, assignedRoom, 0, assignedFaculty);
+            filledSlots++;
+            console.log(`Filled empty slot: ${subj.name} on ${day} at ${time}`);
+          }
         }
       }
     }
   }
+  
+  console.log(`Optimization complete: Filled ${filledSlots} additional slots`);
+  console.log(`Final timetable utilization: ${((availableNonRecessTimes.length * days.length - emptySlots + filledSlots) / (availableNonRecessTimes.length * days.length) * 100).toFixed(1)}%`);
 
   return { times, plan };
 }
@@ -625,39 +776,6 @@ export default function AdminGenerateTimetable(){
           </div>
         </div>
 
-        {/* Enhanced Features Information */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <h3 className="font-medium text-blue-800 mb-2">🚀 Enhanced Timetable Generation Features</h3>
-          <div className="grid md:grid-cols-3 gap-4 text-sm text-blue-700">
-            <div>
-              <h4 className="font-medium mb-1">📚 Smart Batch Handling:</h4>
-              <ul className="text-xs space-y-1">
-                <li>• Lectures: All students attend together</li>
-                <li>• Practicals: Split into individual batches</li>
-                <li>• Manual lab/room assignments for practicals</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-medium mb-1">⚡ Conflict Prevention:</h4>
-              <ul className="text-xs space-y-1">
-                <li>• Room double-booking detection</li>
-                <li>• Faculty scheduling conflicts</li>
-                <li>• Same subject/batch overlap prevention</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-medium mb-1">🍽️ Recess Integration:</h4>
-              <ul className="text-xs space-y-1">
-                <li>• Mandatory 01:00 PM–01:30 PM recess</li>
-                <li>• No classes scheduled during breaks</li>
-                <li>• Clear visual differentiation</li>
-              </ul>
-            </div>
-          </div>
-          <div className="mt-2 text-xs text-blue-600">
-            💡 Configure manual room assignments in the Import Data section for practicals/labs
-          </div>
-        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {results.map((r, idx)=> (
@@ -669,69 +787,84 @@ export default function AdminGenerateTimetable(){
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid" style={{ gridTemplateColumns: `100px repeat(${days.length}, 1fr)` }}>
-                  <div className="text-[11px] p-1">Time</div>
-                  {days.map(d=> <div key={d} className="text-[11px] p-1 text-center">{d}</div>)}
-                  {(() => {
-                    // Only use time slots that contain ranges (have '-' and are not single times)
-                    const timeRangeSlots = r.times.filter(time => 
-                      time.includes('-') && time.includes(':') && 
-                      time.split('-').length === 2 && 
-                      time.split('-')[1].includes(':')
-                    );
-                    
-                    // Sort time slots chronologically for proper flow
-                    const sortedTimes = timeRangeSlots.sort((a, b) => {
-                      const [aStart] = a.split('-');
-                      const [bStart] = b.split('-');
-                      const [aHour, aMin] = aStart.split(':').map(Number);
-                      const [bHour, bMin] = bStart.split(':').map(Number);
-                      const aTime = aHour * 60 + aMin;
-                      const bTime = bHour * 60 + bMin;
-                      return aTime - bTime;
-                    });
-                    
-                    return sortedTimes.map((t)=> (
-                      <Fragment key={t}>
-                        <div className="text-[11px] p-1 border-y">{t}</div>
-                        {days.map((d)=>{
-                          const key = `${d}-${t}`; const vals = r.plan[key] || [];
-                          
-                          // Check if this is a recess break time slot
-                          const isRecessTime = t.includes('13:00-13:30') || t === '13:00-13:30';
-                          
-                          // For recess time, ONLY show recess break
-                          const displayVals = isRecessTime ? 
-                            [{ subject: "RECESS BREAK", room: "ALL", batch: 0 }] : 
-                            vals.filter(v => v.subject !== "RECESS BREAK");
-                          
-                          return <div key={key} className={`p-1 border ${isRecessTime ? 'bg-orange-100 border-orange-300' : displayVals.length? (displayVals.some(v => v.subjectType === 'Practical') ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'):''}`}>
-                            <div className="text-[11px] space-y-1">
-                              {displayVals.map((v,i)=> (
-                                <div key={i} className={isRecessTime ? 'text-orange-700 font-medium' : (v.subjectType === 'Practical' ? 'text-green-700' : 'text-blue-700')}>
-                                  {v.subject === "RECESS BREAK" ? "🍽️ RECESS BREAK" : (
-                                    <div className="space-y-0.5">
-                                      <div className="font-medium flex items-center gap-1">
-                                        {v.subjectType === 'Practical' ? '🧪' : '📚'}
-                                        <span className="text-xs">{v.subjectType === 'Practical' ? 'PRACTICAL' : 'LECTURE'}</span>
-                                        <span>{v.subject}</span>
+                {(() => {
+                  // Only use time slots that contain ranges (have '-' and are not single times)
+                  const timeRangeSlots = r.times.filter(time => 
+                    time.includes('-') && time.includes(':') && 
+                    time.split('-').length === 2 && 
+                    time.split('-')[1].includes(':')
+                  );
+                  
+                  // Sort time slots chronologically for proper flow
+                  const sortedTimes = timeRangeSlots.sort((a, b) => {
+                    const [aStart] = a.split('-');
+                    const [bStart] = b.split('-');
+                    const [aHour, aMin] = aStart.split(':').map(Number);
+                    const [bHour, bMin] = bStart.split(':').map(Number);
+                    const aTime = aHour * 60 + aMin;
+                    const bTime = bHour * 60 + bMin;
+                    return aTime - bTime;
+                  });
+                  
+                  return (
+                    <div className="overflow-x-auto">
+                      <div className="grid" style={{ gridTemplateColumns: `100px repeat(${sortedTimes.length}, 1fr)` }}>
+                        {/* Header row with time slots */}
+                        <div className="text-[11px] p-1 font-medium">Day</div>
+                        {sortedTimes.map(t => (
+                          <div key={t} className="text-[11px] p-1 text-center font-medium border-b">
+                            {t}
+                          </div>
+                        ))}
+                        
+                        {/* Rows for each day */}
+                        {days.map((d) => (
+                          <Fragment key={d}>
+                            <div className="text-[11px] p-1 border-r font-medium bg-gray-50">{d}</div>
+                            {sortedTimes.map((t) => {
+                              const key = `${d}-${t}`;
+                              const vals = r.plan[key] || [];
+                              
+                              // Check if this is a recess break time slot
+                              const isRecessTime = t.includes('13:00-13:30') || t === '13:00-13:30';
+                              
+                              // For recess time, ONLY show recess break
+                              const displayVals = isRecessTime ? 
+                                [{ subject: "RECESS BREAK", room: "ALL", batch: 0 }] : 
+                                vals.filter(v => v.subject !== "RECESS BREAK");
+                              
+                              return (
+                                <div key={key} className={`p-1 border ${isRecessTime ? 'bg-orange-100 border-orange-300' : displayVals.length? (displayVals.some(v => v.subjectType === 'Practical') ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'):''}}`}>
+                                  <div className="text-[11px] space-y-1">
+                                    {displayVals.map((v,i)=> (
+                                      <div key={i} className={isRecessTime ? 'text-orange-700 font-medium' : (v.subjectType === 'Practical' ? 'text-green-700' : 'text-blue-700')}>
+                                        {v.subject === "RECESS BREAK" ? "🍽️" : (
+                                          <div className="space-y-0.5">
+                                            <div className="font-medium flex items-center gap-1">
+                                              {v.subjectType === 'Practical' ? '🧪' : '📚'}
+                                              <span className="text-xs">{v.subjectType === 'Practical' ? 'P' : 'L'}</span>
+                                            </div>
+                                            <div className="text-[9px]">
+                                              {v.subject}
+                                            </div>
+                                            <div className="text-[8px] text-muted-foreground">
+                                              R-{v.room}
+                                              {v.subjectType === 'Practical' ? ` B${v.batch}` : ''}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className="text-[10px] text-muted-foreground">
-                                        R-{v.room}
-                                        {v.subjectType === 'Practical' ? ` • Batch ${v.batch}` : ''}
-                                        {v.faculty && ` • ${v.faculty}`}
-                                      </div>
-                                    </div>
-                                  )}
+                                    ))}
+                                  </div>
                                 </div>
-                              ))}
-                            </div>
-                          </div>;
-                        })}
-                      </Fragment>
-                    ));
-                  })()}
-                </div>
+                              );
+                            })}
+                          </Fragment>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="mt-3 flex gap-2">
                   <Button variant="outline" onClick={()=>openFullScreenView(r, idx)}>View</Button>
                   <Button variant="outline" onClick={()=>sendToHOD(idx)}>Send to HOD</Button>
@@ -756,69 +889,83 @@ export default function AdminGenerateTimetable(){
               </div>
               
               <div className="p-6">
-                <div className="grid" style={{ gridTemplateColumns: `120px repeat(${days.length}, 1fr)` }}>
-                  <div className="text-sm p-2 font-medium">Time</div>
-                  {days.map(d=> <div key={d} className="text-sm p-2 text-center font-medium">{d}</div>)}
-                  {(() => {
-                    // Only use time slots that contain ranges (have '-' and are not single times)
-                    const timeRangeSlots = fullScreenView.data.times.filter((time: string) => 
-                      time.includes('-') && time.includes(':') && 
-                      time.split('-').length === 2 && 
-                      time.split('-')[1].includes(':')
-                    );
-                    
-                    // Sort time slots chronologically for proper flow
-                    const sortedTimes = timeRangeSlots.sort((a: string, b: string) => {
-                      const [aStart] = a.split('-');
-                      const [bStart] = b.split('-');
-                      const [aHour, aMin] = aStart.split(':').map(Number);
-                      const [bHour, bMin] = bStart.split(':').map(Number);
-                      const aTime = aHour * 60 + aMin;
-                      const bTime = bHour * 60 + bMin;
-                      return aTime - bTime;
-                    });
-                    
-                    return sortedTimes.map((t: string)=> (
-                      <Fragment key={t}>
-                        <div className="text-sm p-2 border-y font-medium bg-gray-50">{t}</div>
-                        {days.map((d)=>{
-                          const key = `${d}-${t}`; const vals = fullScreenView.data.plan[key] || [];
-                          
-                          // Check if this is a recess break time slot
-                          const isRecessTime = t.includes('13:00-13:30') || t === '13:00-13:30';
-                          
-                          // For recess time, ONLY show recess break
-                          const displayVals = isRecessTime ? 
-                            [{ subject: "RECESS BREAK", room: "ALL", batch: 0 }] : 
-                            vals.filter((v: any) => v.subject !== "RECESS BREAK");
-                          
-                          return <div key={key} className={`p-2 border min-h-[80px] ${isRecessTime ? 'bg-orange-100 border-orange-300' : displayVals.length? (displayVals.some((v: any) => v.subjectType === 'Practical') ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'):''}`}>
-                            <div className="text-sm space-y-2">
-                              {displayVals.map((v: any,i: number)=> (
-                                <div key={i} className={`p-2 rounded ${isRecessTime ? 'text-orange-700 font-medium bg-orange-200' : (v.subjectType === 'Practical' ? 'text-green-700 bg-green-100' : 'text-blue-700 bg-blue-100')}`}>
-                                  {v.subject === "RECESS BREAK" ? "🍽️ RECESS BREAK" : (
-                                    <div className="space-y-1">
-                                      <div className="font-medium flex items-center gap-2">
-                                        {v.subjectType === 'Practical' ? '🧪' : '📚'}
-                                        <span className="text-xs px-2 py-1 rounded bg-white bg-opacity-70">{v.subjectType === 'Practical' ? 'PRACTICAL' : 'LECTURE'}</span>
-                                        <span className="font-semibold">{v.subject}</span>
+                {(() => {
+                  // Only use time slots that contain ranges (have '-' and are not single times)
+                  const timeRangeSlots = fullScreenView.data.times.filter((time: string) => 
+                    time.includes('-') && time.includes(':') && 
+                    time.split('-').length === 2 && 
+                    time.split('-')[1].includes(':')
+                  );
+                  
+                  // Sort time slots chronologically for proper flow
+                  const sortedTimes = timeRangeSlots.sort((a: string, b: string) => {
+                    const [aStart] = a.split('-');
+                    const [bStart] = b.split('-');
+                    const [aHour, aMin] = aStart.split(':').map(Number);
+                    const [bHour, bMin] = bStart.split(':').map(Number);
+                    const aTime = aHour * 60 + aMin;
+                    const bTime = bHour * 60 + bMin;
+                    return aTime - bTime;
+                  });
+                  
+                  return (
+                    <div className="overflow-x-auto">
+                      <div className="grid" style={{ gridTemplateColumns: `120px repeat(${sortedTimes.length}, 1fr)` }}>
+                        {/* Header row with time slots */}
+                        <div className="text-sm p-2 font-medium bg-gray-100 border">Day</div>
+                        {sortedTimes.map((t: string) => (
+                          <div key={t} className="text-sm p-2 text-center font-medium bg-gray-100 border">
+                            {t}
+                          </div>
+                        ))}
+                        
+                        {/* Rows for each day */}
+                        {days.map((d) => (
+                          <Fragment key={d}>
+                            <div className="text-sm p-2 font-medium bg-gray-50 border">{d}</div>
+                            {sortedTimes.map((t: string) => {
+                              const key = `${d}-${t}`;
+                              const vals = fullScreenView.data.plan[key] || [];
+                              
+                              // Check if this is a recess break time slot
+                              const isRecessTime = t.includes('13:00-13:30') || t === '13:00-13:30';
+                              
+                              // For recess time, ONLY show recess break
+                              const displayVals = isRecessTime ? 
+                                [{ subject: "RECESS BREAK", room: "ALL", batch: 0 }] : 
+                                vals.filter((v: any) => v.subject !== "RECESS BREAK");
+                              
+                              return (
+                                <div key={key} className={`p-2 border min-h-[100px] ${isRecessTime ? 'bg-orange-100 border-orange-300' : displayVals.length? (displayVals.some((v: any) => v.subjectType === 'Practical') ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'):''}}`}>
+                                  <div className="text-sm space-y-2">
+                                    {displayVals.map((v: any, i: number) => (
+                                      <div key={i} className={`p-2 rounded ${isRecessTime ? 'text-orange-700 font-medium bg-orange-200' : (v.subjectType === 'Practical' ? 'text-green-700 bg-green-100' : 'text-blue-700 bg-blue-100')}`}>
+                                        {v.subject === "RECESS BREAK" ? "🍽️ RECESS BREAK" : (
+                                          <div className="space-y-1">
+                                            <div className="font-medium flex items-center gap-2">
+                                              {v.subjectType === 'Practical' ? '🧪' : '📚'}
+                                              <span className="text-xs px-2 py-1 rounded bg-white bg-opacity-70">{v.subjectType === 'Practical' ? 'PRACTICAL' : 'LECTURE'}</span>
+                                              <span className="font-semibold">{v.subject}</span>
+                                            </div>
+                                            <div className="text-sm text-gray-600">
+                                              <div>Room: {v.room}</div>
+                                              {v.subjectType === 'Practical' && <div>Batch: {v.batch}</div>}
+                                              {v.faculty && <div>Faculty: {v.faculty}</div>}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className="text-sm text-gray-600">
-                                        <div>Room: {v.room}</div>
-                                        {v.subjectType === 'Practical' && <div>Batch: {v.batch}</div>}
-                                        {v.faculty && <div>Faculty: {v.faculty}</div>}
-                                      </div>
-                                    </div>
-                                  )}
+                                    ))}
+                                  </div>
                                 </div>
-                              ))}
-                            </div>
-                          </div>;
-                        })}
-                      </Fragment>
-                    ));
-                  })()}
-                </div>
+                              );
+                            })}
+                          </Fragment>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 
                 {/* Conflicts Display */}
                 {fullScreenView.data.conflicts.length > 0 && (
